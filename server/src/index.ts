@@ -5,6 +5,7 @@ import path from 'path';
 import meetingsRouter from './routes/meetings.js';
 import uploadRouter from './routes/upload.js';
 import chatRouter from './routes/chat.js';
+import { getMetrics } from './db/client.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -14,6 +15,14 @@ app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:4173'] }));
 app.use(express.json());
 
 // Routes
+app.get('/api/metrics', async (_req, res) => {
+  try {
+    res.json(await getMetrics());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch metrics' });
+  }
+});
 app.use('/api/meetings', meetingsRouter);
 app.use('/api/meetings', chatRouter);
 app.use('/api/upload', uploadRouter);

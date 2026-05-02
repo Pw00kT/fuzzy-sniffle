@@ -2,21 +2,10 @@ import { Router, Request, Response } from 'express';
 import {
   getMeetings, getMeetingById, createMeeting, updateMeeting,
   getExtractedData, getUtilities, getActionItems, getRisks,
-  getKeyDecisions, getTranscript, getMetrics,
+  getKeyDecisions, getTranscript,
 } from '../db/client.js';
 
 const router = Router();
-
-// GET /api/metrics
-router.get('/metrics', async (_req: Request, res: Response) => {
-  try {
-    const metrics = await getMetrics();
-    res.json(metrics);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch metrics' });
-  }
-});
 
 // GET /api/meetings
 router.get('/', async (_req: Request, res: Response) => {
