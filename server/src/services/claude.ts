@@ -60,7 +60,7 @@ export async function extractMeetingData(transcript: string): Promise<ExtractedM
   const stream = client.messages.stream({
     model: 'claude-opus-4-6',
     max_tokens: 4096,
-    thinking: { type: 'adaptive' },
+    thinking: { type: 'enabled', budget_tokens: 1024 },
     system: EXTRACTION_SYSTEM,
     messages: [{ role: 'user', content: EXTRACTION_PROMPT(transcript) }],
   });

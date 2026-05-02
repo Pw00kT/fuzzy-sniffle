@@ -41,18 +41,19 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/meetings/:id
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
   try {
-    const meeting = await getMeetingById(req.params.id);
+    const { id } = req.params;
+    const meeting = await getMeetingById(id);
     if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
 
     const [extractedData, utilities, actionItems, risks, keyDecisions, transcript] = await Promise.all([
-      getExtractedData(req.params.id),
-      getUtilities(req.params.id),
-      getActionItems(req.params.id),
-      getRisks(req.params.id),
-      getKeyDecisions(req.params.id),
-      getTranscript(req.params.id),
+      getExtractedData(id),
+      getUtilities(id),
+      getActionItems(id),
+      getRisks(id),
+      getKeyDecisions(id),
+      getTranscript(id),
     ]);
 
     res.json({
@@ -73,7 +74,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // PUT /api/meetings/:id
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const meeting = await updateMeeting(req.params.id, req.body);
     if (!meeting) return res.status(404).json({ error: 'Meeting not found' });

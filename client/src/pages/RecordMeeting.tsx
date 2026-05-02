@@ -59,7 +59,8 @@ export default function RecordMeeting() {
         'IDOT utility coordination meeting in progress'
       )
       if (result?.insight) {
-        setInsights((prev) => [{ text: result.insight, timestamp: Date.now() }, ...prev].slice(0, 5))
+        const text = result.insight
+        setInsights((prev) => [{ text, timestamp: Date.now() }, ...prev].slice(0, 5))
       }
     } catch {
       // coaching is best-effort

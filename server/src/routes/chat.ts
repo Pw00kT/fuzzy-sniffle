@@ -6,18 +6,19 @@ import { formatTranscriptForClaude } from '../services/whisper.js';
 const router = Router();
 
 // POST /api/meetings/:id/chat  — streams the response via SSE
-router.post('/:id/chat', async (req: Request, res: Response) => {
+router.post('/:id/chat', async (req: Request<{ id: string }>, res: Response) => {
   const { message } = req.body;
   if (!message?.trim()) {
     return res.status(400).json({ error: 'message is required' });
   }
 
-  const meeting = await getMeetingById(req.params.id);
+  const { id } = req.params;
+  const meeting = await getMeetingById(id);
   if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
 
   const [transcriptRows, historyRows] = await Promise.all([
-    getTranscript(req.params.id),
-    getChatHistory(req.params.id),
+    getTranscript(id),
+    getChatHistory(id),
   ]);
 
   if (transcriptRows.length === 0) {
@@ -50,8 +51,8 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
     }
 
     // Save the exchange
-    await saveChatMessage(req.params.id, 'user', message);
-    await saveChatMessage(req.params.id, 'assistant', fullResponse);
+    await saveChatMessage(id, 'user', message);
+    await saveChatMessage(id, 'assistant', fullResponse);
 
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
   } catch (err) {
@@ -63,7 +64,7 @@ router.post('/:id/chat', async (req: Request, res: Response) => {
 });
 
 // GET /api/meetings/:id/chat  — get chat history
-router.get('/:id/chat', async (req: Request, res: Response) => {
+router.get('/:id/chat', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const history = await getChatHistory(req.params.id);
     res.json({ messages: history });

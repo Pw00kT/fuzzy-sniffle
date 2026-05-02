@@ -124,13 +124,14 @@ async function processMeeting(meetingId: string, filePath: string) {
 }
 
 // GET /api/upload/status/:meetingId
-router.get('/status/:meetingId', async (req: Request, res: Response) => {
-  const status = processingStatus[req.params.meetingId];
+router.get('/status/:meetingId', async (req: Request<{ meetingId: string }>, res: Response) => {
+  const { meetingId } = req.params;
+  const status = processingStatus[meetingId];
   if (!status) {
     // Check DB
     try {
       const { getMeetingById } = await import('../db/client.js');
-      const meeting = await getMeetingById(req.params.meetingId);
+      const meeting = await getMeetingById(meetingId);
       if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
       return res.json({ status: meeting.status, progress: meeting.status === 'completed' ? 100 : 0 });
     } catch {
