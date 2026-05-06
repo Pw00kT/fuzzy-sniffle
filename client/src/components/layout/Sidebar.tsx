@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'wouter'
-import { LayoutDashboard, Mic, Upload, FileText, Zap } from 'lucide-react'
+import { LayoutDashboard, Mic, Upload, Zap, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -8,7 +8,11 @@ const navItems = [
   { href: '/upload', label: 'Upload Audio', icon: Upload },
 ]
 
-export default function Sidebar() {
+interface Props {
+  onLogout: () => void
+}
+
+export default function Sidebar({ onLogout }: Props) {
   const [location] = useLocation()
 
   return (
@@ -47,12 +51,19 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-6 py-4 border-t border-slate-700">
+      <div className="px-6 py-4 border-t border-slate-700 space-y-2">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           <span className="text-xs text-slate-400">Connected to API</span>
         </div>
-        <p className="text-xs text-slate-500 mt-1">Powered by Claude &amp; Whisper</p>
+        <p className="text-xs text-slate-500">Powered by Claude &amp; Whisper</p>
+        <button
+          onClick={onLogout}
+          className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition-colors w-full mt-1"
+        >
+          <LogOut className="w-3 h-3" />
+          Sign out
+        </button>
       </div>
     </aside>
   )

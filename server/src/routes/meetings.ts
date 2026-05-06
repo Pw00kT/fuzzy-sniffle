@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import {
   getMeetings, getMeetingById, createMeeting, updateMeeting,
   getExtractedData, getUtilities, getActionItems, getRisks,
-  getKeyDecisions, getTranscript,
+  getKeyDecisions, getTranscript, updateActionItem,
 } from '../db/client.js';
 
 const router = Router();
@@ -71,6 +71,23 @@ router.put('/:id', async (req: Request<{ id: string }>, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update meeting' });
+  }
+});
+
+// PATCH /api/meetings/action-items/:id
+router.patch('/action-items/:id', async (req: Request<{ id: string }>, res: Response) => {
+  const { status } = req.body;
+  const allowed = ['open', 'in-progress', 'completed'];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
+  }
+  try {
+    const item = await updateActionItem(req.params.id, status);
+    if (!item) return res.status(404).json({ error: 'Action item not found' });
+    res.json({ item });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update action item' });
   }
 });
 

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'wouter'
 import {
   ArrowLeft, MapPin, Calendar, Clock, Users, AlertTriangle, CheckSquare,
-  Send, Loader2, ChevronDown, ChevronUp, Search, MessageSquare
+  Send, Loader2, ChevronDown, ChevronUp, Search, MessageSquare, RefreshCw
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +19,35 @@ import type { MeetingDetail, ChatMessage, TranscriptSegment } from '@/lib/types'
 
 // ─── Extracted Data Tab ───────────────────────────────────────────────────────
 
-function ExtractedDataTab({ detail }: { detail: MeetingDetail }) {
+type ActionStatus = 'open' | 'in-progress' | 'completed'
+
+function ActionStatusSelect({ id, status, onChange }: { id: string; status: ActionStatus; onChange: (id: string, s: ActionStatus) => void }) {
+  const [saving, setSaving] = useState(false)
+  const cycle: ActionStatus[] = ['open', 'in-progress', 'completed']
+  const next = cycle[(cycle.indexOf(status) + 1) % cycle.length]
+
+  const toggle = async () => {
+    setSaving(true)
+    try { await onChange(id, next) } finally { setSaving(false) }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={saving}
+      className={cn(
+        'text-xs px-2 py-0.5 rounded-full font-medium transition-colors border',
+        status === 'completed' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+          : status === 'in-progress' ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+          : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+      )}
+    >
+      {saving ? '…' : status}
+    </button>
+  )
+}
+
+function ExtractedDataTab({ detail, onActionStatusChange }: { detail: MeetingDetail; onActionStatusChange: (id: string, status: ActionStatus) => void }) {
   const ed = detail.extractedData
   const [showAll, setShowAll] = useState(false)
   const decisions = detail.keyDecisions ?? []
@@ -121,16 +149,17 @@ function ExtractedDataTab({ detail }: { detail: MeetingDetail }) {
                     : 'bg-gray-400'
                 )} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{item.description}</p>
+                  <p className={cn('text-sm font-medium', item.status === 'completed' && 'line-through text-muted-foreground')}>
+                    {item.description}
+                  </p>
                   <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted-foreground">
                     {item.assignee && <span>Assigned: {item.assignee}</span>}
                     {item.due_date && <span>Due: {formatDate(item.due_date)}</span>}
-                    <Badge
-                      variant={item.status === 'completed' ? 'success' : item.status === 'in-progress' ? 'outline' : 'warning'}
-                      className="text-xs"
-                    >
-                      {item.status}
-                    </Badge>
+                    <ActionStatusSelect
+                      id={item.id}
+                      status={item.status as ActionStatus}
+                      onChange={onActionStatusChange}
+                    />
                   </div>
                 </div>
               </div>
@@ -463,18 +492,53 @@ export default function MeetingDetailPage() {
   const id = params.id
   const [detail, setDetail] = useState<MeetingDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchDetail = useCallback((meetingId: string) => {
+    return api.meetings
+      .get(meetingId)
+      .then((d) => setDetail(d))
+      .catch(() => {
+        const mock = mockMeetingDetails[meetingId as keyof typeof mockMeetingDetails]
+        if (mock) setDetail(mock)
+      })
+  }, [])
 
   useEffect(() => {
     if (!id) return
-    api.meetings
-      .get(id)
-      .then((d) => setDetail(d))
-      .catch(() => {
-        const mock = mockMeetingDetails[id as keyof typeof mockMeetingDetails]
-        if (mock) setDetail(mock)
-      })
-      .finally(() => setLoading(false))
-  }, [id])
+    fetchDetail(id).finally(() => setLoading(false))
+  }, [id, fetchDetail])
+
+  // Poll while processing
+  useEffect(() => {
+    if (!id || !detail) return
+    if (detail.status !== 'processing') {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+      return
+    }
+    if (pollRef.current) return // already polling
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await api.upload.status(id)
+        if (s.status === 'completed' || s.status === 'error') {
+          clearInterval(pollRef.current!); pollRef.current = null
+          fetchDetail(id)
+        }
+      } catch { /* keep polling */ }
+    }, 4000)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [id, detail?.status, fetchDetail])
+
+  const handleActionStatusChange = useCallback(async (itemId: string, status: ActionStatus) => {
+    await api.actionItems.updateStatus(itemId, status)
+    setDetail((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        actionItems: prev.actionItems.map((a) => a.id === itemId ? { ...a, status } : a),
+      }
+    })
+  }, [])
 
   if (loading) {
     return (
@@ -497,6 +561,14 @@ export default function MeetingDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Processing banner */}
+      {detail.status === 'processing' && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+          <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+          <span>Processing audio — transcribing and extracting meeting data. This page will update automatically.</span>
+        </div>
+      )}
+
       <div>
         <Link href="/">
           <button className="flex items-center gap-1 text-sm text-muted-foreground hover:text-gray-900 mb-4">
@@ -548,7 +620,7 @@ export default function MeetingDetailPage() {
         </TabsList>
 
         <TabsContent value="data" className="mt-6">
-          <ExtractedDataTab detail={detail} />
+          <ExtractedDataTab detail={detail} onActionStatusChange={handleActionStatusChange} />
         </TabsContent>
 
         <TabsContent value="transcript" className="mt-6">

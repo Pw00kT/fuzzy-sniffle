@@ -285,6 +285,21 @@ export async function getActionItems(meetingId: string) {
   return store.actionItems[meetingId] || [];
 }
 
+export async function updateActionItem(id: string, status: string) {
+  if (pool) {
+    const { rows } = await pool.query(
+      'UPDATE action_items SET status = $2 WHERE id = $1 RETURNING *',
+      [id, status]
+    );
+    return rows[0] || null;
+  }
+  for (const items of Object.values(store.actionItems)) {
+    const item = items.find((a: any) => a.id === id);
+    if (item) { item.status = status; return item; }
+  }
+  return null;
+}
+
 export async function insertActionItems(meetingId: string, items: any[]) {
   if (pool) {
     for (const item of items) {

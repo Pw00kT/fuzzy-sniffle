@@ -8,6 +8,30 @@ export interface TranscriptSegment {
   sequenceNumber: number;
 }
 
+// Group Whisper segments into speaker turns using pause duration as a heuristic.
+// Not as accurate as a real diarization API, but far better than labelling
+// everything "Speaker". A pause of >= 1.5 s between segments signals a new turn.
+function applyHeuristicDiarization(rawSegments: Array<{ start: number; end: number; text: string }>): TranscriptSegment[] {
+  const SPEAKER_NAMES = ['Speaker A', 'Speaker B', 'Speaker C', 'Speaker D']
+  const TURN_GAP_SECONDS = 1.5
+
+  let speakerIdx = 0
+  let lastEnd = 0
+
+  return rawSegments.map((seg, i) => {
+    if (i > 0 && (seg.start - lastEnd) >= TURN_GAP_SECONDS) {
+      speakerIdx = (speakerIdx + 1) % SPEAKER_NAMES.length
+    }
+    lastEnd = seg.end
+    return {
+      speaker: SPEAKER_NAMES[speakerIdx],
+      text: seg.text.trim(),
+      timestampSeconds: Math.round(seg.start),
+      sequenceNumber: i,
+    }
+  })
+}
+
 export async function transcribeAudio(filePath: string): Promise<TranscriptSegment[]> {
   if (!process.env.OPENAI_API_KEY) {
     console.warn('OPENAI_API_KEY not set — returning mock transcript');
@@ -22,16 +46,14 @@ export async function transcribeAudio(filePath: string): Promise<TranscriptSegme
       model: 'whisper-1',
       response_format: 'verbose_json',
       timestamp_granularities: ['segment'],
-    });
+    }) as any; // SDK types don't expose segments on base Transcription
 
-    const segments = (transcription.segments ?? []).map((seg, i) => ({
-      speaker: 'Speaker',
-      text: seg.text.trim(),
-      timestampSeconds: Math.round(seg.start),
-      sequenceNumber: i,
-    }))
+    const raw: Array<{ start: number; end: number; text: string }> =
+      transcription.segments ?? [];
 
-    return segments.length > 0 ? segments : getMockTranscript();
+    if (raw.length === 0) return getMockTranscript();
+
+    return applyHeuristicDiarization(raw);
   } catch (err) {
     console.error('Transcription error:', err);
     return getMockTranscript();
@@ -40,15 +62,15 @@ export async function transcribeAudio(filePath: string): Promise<TranscriptSegme
 
 function getMockTranscript(): TranscriptSegment[] {
   return [
-    { speaker: 'IDOT Representative', text: "Good morning, let's get started with the utility coordination meeting.", timestampSeconds: 0, sequenceNumber: 0 },
-    { speaker: 'Utility Representative', text: "Good morning. We've completed our conflict analysis and have some items to discuss.", timestampSeconds: 12, sequenceNumber: 1 },
-    { speaker: 'IDOT Representative', text: "Please go ahead and walk us through the conflicts you've identified.", timestampSeconds: 24, sequenceNumber: 2 },
-    { speaker: 'Utility Representative', text: "We have a transmission line conflict in the project corridor. Relocation will take approximately 6 to 8 months.", timestampSeconds: 35, sequenceNumber: 3 },
-    { speaker: 'IDOT Representative', text: "That timeline is a concern given our letting date. Can you provide a cost estimate and schedule by end of month?", timestampSeconds: 58, sequenceNumber: 4 },
-    { speaker: 'Utility Representative', text: "Yes, we can have a preliminary estimate to you within two weeks.", timestampSeconds: 78, sequenceNumber: 5 },
-    { speaker: 'IDOT Representative', text: "Excellent. Let's make sure that's captured as an action item. Are there any right-of-way issues we should be aware of?", timestampSeconds: 92, sequenceNumber: 6 },
-    { speaker: 'Utility Representative', text: "We'll need to confirm the final ROW limits before finalizing our relocation design.", timestampSeconds: 112, sequenceNumber: 7 },
-    { speaker: 'IDOT Representative', text: "Understood. We'll get you the final ROW package. Let's schedule a follow-up for next month.", timestampSeconds: 130, sequenceNumber: 8 },
+    { speaker: 'Speaker A', text: "Good morning, let's get started with the utility coordination meeting.", timestampSeconds: 0, sequenceNumber: 0 },
+    { speaker: 'Speaker B', text: "Good morning. We've completed our conflict analysis and have some items to discuss.", timestampSeconds: 12, sequenceNumber: 1 },
+    { speaker: 'Speaker A', text: "Please go ahead and walk us through the conflicts you've identified.", timestampSeconds: 24, sequenceNumber: 2 },
+    { speaker: 'Speaker B', text: "We have a transmission line conflict in the project corridor. Relocation will take approximately 6 to 8 months.", timestampSeconds: 35, sequenceNumber: 3 },
+    { speaker: 'Speaker A', text: "That timeline is a concern given our letting date. Can you provide a cost estimate and schedule by end of month?", timestampSeconds: 58, sequenceNumber: 4 },
+    { speaker: 'Speaker B', text: "Yes, we can have a preliminary estimate to you within two weeks.", timestampSeconds: 78, sequenceNumber: 5 },
+    { speaker: 'Speaker A', text: "Excellent. Let's make sure that's captured as an action item. Are there any right-of-way issues we should be aware of?", timestampSeconds: 92, sequenceNumber: 6 },
+    { speaker: 'Speaker B', text: "We'll need to confirm the final ROW limits before finalizing our relocation design.", timestampSeconds: 112, sequenceNumber: 7 },
+    { speaker: 'Speaker A', text: "Understood. We'll get you the final ROW package. Let's schedule a follow-up for next month.", timestampSeconds: 130, sequenceNumber: 8 },
   ];
 }
 
