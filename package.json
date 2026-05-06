@@ -2,14 +2,21 @@
   "name": "idot-meeting-assistant",
   "version": "1.0.0",
   "private": true,
+  "main": "electron/dist/main.js",
   "workspaces": ["client", "server"],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
     "build": "npm run build --workspace=server && npm run build --workspace=client",
+    "build:electron": "tsc -p electron/tsconfig.json",
     "start": "npm run start --workspace=server",
+    "electron:dev": "concurrently \"npm run dev\" \"npx wait-on http://localhost:5173 && electron .\"",
+    "dist": "npm run build && npm run build:electron && electron-builder",
     "db:migrate": "psql $DATABASE_URL -f server/src/db/schema.sql"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "wait-on": "^7.2.0"
   }
 }

@@ -1,11 +1,12 @@
 import { Link, useLocation } from 'wouter'
-import { LayoutDashboard, Mic, Upload, Zap, LogOut } from 'lucide-react'
+import { LayoutDashboard, Mic, Upload, Zap, LogOut, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/record', label: 'Record Meeting', icon: Mic },
   { href: '/upload', label: 'Upload Audio', icon: Upload },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
 interface Props {

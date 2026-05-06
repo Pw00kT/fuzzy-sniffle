@@ -5,6 +5,7 @@ import path from 'path';
 import meetingsRouter from './routes/meetings.js';
 import uploadRouter from './routes/upload.js';
 import chatRouter from './routes/chat.js';
+import settingsRouter from './routes/settings.js';
 import { getMetrics } from './db/client.js';
 import { authMiddleware } from './middleware/auth.js';
 
@@ -50,6 +51,7 @@ app.get('/api/metrics', async (_req, res) => {
 app.use('/api/meetings', meetingsRouter);
 app.use('/api/meetings', chatRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/settings', settingsRouter);
 
 // ─── Production static serving ────────────────────────────────────────────────
 

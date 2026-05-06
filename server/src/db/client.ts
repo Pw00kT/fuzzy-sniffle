@@ -1,5 +1,7 @@
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
+import fs from 'fs';
 
 // ─── In-Memory Store (fallback when DATABASE_URL is not set) ──────────────────
 
@@ -141,7 +143,29 @@ function seedMockData() {
   ];
 }
 
-seedMockData();
+// ─── JSON File Persistence (Electron / no-database mode) ─────────────────────
+
+function dataFilePath(): string | null {
+  return process.env.USER_DATA_PATH
+    ? path.join(process.env.USER_DATA_PATH, 'meetings.json')
+    : null
+}
+
+export function saveStore() {
+  const file = dataFilePath()
+  if (!file) return
+  try { fs.writeFileSync(file, JSON.stringify(store), 'utf8') } catch (e) { console.error('saveStore:', e) }
+}
+
+function loadStore() {
+  const file = dataFilePath()
+  if (!file || !fs.existsSync(file)) return
+  try { Object.assign(store, JSON.parse(fs.readFileSync(file, 'utf8'))) } catch (e) { console.error('loadStore:', e) }
+}
+
+// Bootstrap: load persisted data; seed only when the store is empty (first run)
+loadStore()
+if (Object.keys(store.meetings).length === 0) { seedMockData(); saveStore() }
 
 // ─── Database Interface ───────────────────────────────────────────────────────
 
@@ -212,6 +236,7 @@ export async function createMeeting(data: {
     audio_file_path: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   };
   store.meetings[id] = meeting;
+  saveStore();
   return meeting;
 }
 
@@ -226,6 +251,7 @@ export async function updateMeeting(id: string, data: Record<string, any>) {
   }
   if (store.meetings[id]) {
     store.meetings[id] = { ...store.meetings[id], ...data, updated_at: new Date().toISOString() };
+    saveStore();
   }
   return store.meetings[id];
 }
@@ -254,6 +280,7 @@ export async function upsertExtractedData(meetingId: string, data: Record<string
     return;
   }
   store.extractedData[meetingId] = { id: uuidv4(), meeting_id: meetingId, ...data };
+  saveStore();
 }
 
 export async function getUtilities(meetingId: string) {
@@ -275,6 +302,7 @@ export async function insertUtilities(meetingId: string, utilities: any[]) {
     return;
   }
   store.utilities[meetingId] = utilities.map((u) => ({ id: uuidv4(), meeting_id: meetingId, owner: u.owner, facility_type: u.facilityType, conflict_type: u.conflictType, location: u.location, status: u.status, notes: u.notes }));
+  saveStore();
 }
 
 export async function getActionItems(meetingId: string) {
@@ -295,7 +323,7 @@ export async function updateActionItem(id: string, status: string) {
   }
   for (const items of Object.values(store.actionItems)) {
     const item = items.find((a: any) => a.id === id);
-    if (item) { item.status = status; return item; }
+    if (item) { item.status = status; saveStore(); return item; }
   }
   return null;
 }
@@ -311,6 +339,7 @@ export async function insertActionItems(meetingId: string, items: any[]) {
     return;
   }
   store.actionItems[meetingId] = items.map((item) => ({ id: uuidv4(), meeting_id: meetingId, description: item.description, assignee: item.assignee, due_date: item.dueDate || null, priority: item.priority, status: 'open' }));
+  saveStore();
 }
 
 export async function getRisks(meetingId: string) {
@@ -332,6 +361,7 @@ export async function insertRisks(meetingId: string, risks: any[]) {
     return;
   }
   store.risks[meetingId] = risks.map((r) => ({ id: uuidv4(), meeting_id: meetingId, description: r.description, level: r.level, category: r.category, mitigation: r.mitigation }));
+  saveStore();
 }
 
 export async function getKeyDecisions(meetingId: string) {
@@ -353,6 +383,7 @@ export async function insertKeyDecisions(meetingId: string, decisions: any[]) {
     return;
   }
   store.keyDecisions[meetingId] = decisions.map((d) => ({ id: uuidv4(), meeting_id: meetingId, description: d.description, made_by: d.madeBy }));
+  saveStore();
 }
 
 export async function getTranscript(meetingId: string) {
@@ -374,6 +405,7 @@ export async function insertTranscript(meetingId: string, segments: any[]) {
     return;
   }
   store.transcripts[meetingId] = segments.map((seg, i) => ({ id: uuidv4(), meeting_id: meetingId, speaker: seg.speaker, text: seg.text, timestamp_seconds: seg.timestampSeconds || 0, sequence_number: seg.sequenceNumber || i }));
+  saveStore();
 }
 
 export async function getChatHistory(meetingId: string) {
@@ -391,6 +423,7 @@ export async function saveChatMessage(meetingId: string, role: string, content: 
   }
   if (!store.chatMessages[meetingId]) store.chatMessages[meetingId] = [];
   store.chatMessages[meetingId].push({ id: uuidv4(), meeting_id: meetingId, role, content, created_at: new Date().toISOString() });
+  saveStore();
 }
 
 export async function getMetrics() {

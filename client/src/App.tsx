@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import RecordMeeting from './pages/RecordMeeting'
 import UploadAudio from './pages/UploadAudio'
 import MeetingDetail from './pages/MeetingDetail'
+import Settings from './pages/Settings'
 import Login from './pages/Login'
 import { api } from './lib/api'
 
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/record" component={RecordMeeting} />
         <Route path="/upload" component={UploadAudio} />
         <Route path="/meeting/:id" component={MeetingDetail} />
+        <Route path="/settings" component={Settings} />
         <Route>
           <div className="flex items-center justify-center h-64 text-muted-foreground">
             Page not found

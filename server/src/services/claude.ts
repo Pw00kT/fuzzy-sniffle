@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Lazy client so that a key set via the Settings page takes effect on the next call
+const getClient = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export interface ExtractedMeetingData {
   contractNumber?: string;
@@ -57,7 +58,7 @@ TRANSCRIPT:
 ${transcript}`;
 
 export async function extractMeetingData(transcript: string): Promise<ExtractedMeetingData> {
-  const stream = client.messages.stream({
+  const stream = getClient().messages.stream({
     model: 'claude-opus-4-6',
     max_tokens: 4096,
     thinking: { type: 'enabled', budget_tokens: 1024 },
@@ -83,7 +84,7 @@ const COACHING_SYSTEM = `You are a real-time coaching assistant for IDOT (Illino
 export async function generateCoachingInsight(recentTranscript: string, context: string): Promise<string | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null;
 
-  const response = await client.messages.create({
+  const response = await getClient().messages.create({
     model: 'claude-opus-4-6',
     max_tokens: 256,
     system: COACHING_SYSTEM,
@@ -112,7 +113,7 @@ export async function* chatWithTranscript(
     { role: 'user', content: question },
   ];
 
-  const stream = client.messages.stream({
+  const stream = getClient().messages.stream({
     model: 'claude-opus-4-6',
     max_tokens: 2048,
     system: `You are Sidecar, an AI assistant helping analyze an IDOT utility coordination meeting transcript. Answer questions based ONLY on information in the transcript. If something isn't in the transcript, say so clearly. Be concise and cite specific speakers or moments when relevant.
