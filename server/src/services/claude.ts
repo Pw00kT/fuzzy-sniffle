@@ -1,7 +1,12 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
-// Lazy client so that a key set via the Settings page takes effect on the next call
-const getClient = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Lazy client — picks up PERPLEXITY_API_KEY set via Settings page immediately
+const getClient = () => new OpenAI({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  baseURL: 'https://api.perplexity.ai',
+});
+
+const MODEL = () => process.env.PERPLEXITY_MODEL || 'sonar-pro';
 
 export interface ExtractedMeetingData {
   contractNumber?: string;
@@ -58,23 +63,23 @@ TRANSCRIPT:
 ${transcript}`;
 
 export async function extractMeetingData(transcript: string): Promise<ExtractedMeetingData> {
-  const stream = getClient().messages.stream({
-    model: 'claude-opus-4-6',
+  const response = await getClient().chat.completions.create({
+    model: MODEL(),
     max_tokens: 4096,
-    thinking: { type: 'enabled', budget_tokens: 1024 },
-    system: EXTRACTION_SYSTEM,
-    messages: [{ role: 'user', content: EXTRACTION_PROMPT(transcript) }],
+    messages: [
+      { role: 'system', content: EXTRACTION_SYSTEM },
+      { role: 'user', content: EXTRACTION_PROMPT(transcript) },
+    ],
   });
 
-  const message = await stream.finalMessage();
-  const text = message.content.find((b) => b.type === 'text')?.text ?? '{}';
+  const text = response.choices[0]?.message?.content ?? '{}';
 
   try {
     return JSON.parse(text);
   } catch {
     const match = text.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
-    console.error('Failed to parse Claude extraction response:', text.slice(0, 200));
+    console.error('Failed to parse extraction response:', text.slice(0, 200));
     return { utilities: [], actionItems: [], keyDecisions: [], risks: [] };
   }
 }
@@ -82,23 +87,25 @@ export async function extractMeetingData(transcript: string): Promise<ExtractedM
 const COACHING_SYSTEM = `You are a real-time coaching assistant for IDOT (Illinois Department of Transportation) utility coordination meetings. Provide brief, actionable coaching based on what's being discussed. Focus on IDOT-specific processes, utility coordination requirements, and common meeting pitfalls.`;
 
 export async function generateCoachingInsight(recentTranscript: string, context: string): Promise<string | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
+  if (!process.env.PERPLEXITY_API_KEY) return null;
 
-  const response = await getClient().messages.create({
-    model: 'claude-opus-4-6',
+  const response = await getClient().chat.completions.create({
+    model: MODEL(),
     max_tokens: 256,
-    system: COACHING_SYSTEM,
-    messages: [{
-      role: 'user',
-      content: `Based on this meeting discussion, provide ONE brief coaching tip (2-3 sentences max). Only respond if there's something genuinely useful to add about IDOT utility coordination processes. If nothing specific is needed, respond with exactly: NO_COACHING_NEEDED
+    messages: [
+      { role: 'system', content: COACHING_SYSTEM },
+      {
+        role: 'user',
+        content: `Based on this meeting discussion, provide ONE brief coaching tip (2-3 sentences max). Only respond if there's something genuinely useful to add about IDOT utility coordination processes. If nothing specific is needed, respond with exactly: NO_COACHING_NEEDED
 
 Meeting context: ${context.slice(0, 500)}
 
 Recent discussion: ${recentTranscript.slice(0, 300)}`,
-    }],
+      },
+    ],
   });
 
-  const text = response.content.find((b) => b.type === 'text')?.text?.trim() ?? '';
+  const text = response.choices[0]?.message?.content?.trim() ?? '';
   if (!text || text === 'NO_COACHING_NEEDED') return null;
   return text;
 }
@@ -108,24 +115,25 @@ export async function* chatWithTranscript(
   transcript: string,
   history: Array<{ role: 'user' | 'assistant'; content: string }>
 ): AsyncGenerator<string> {
-  const messages: Anthropic.MessageParam[] = [
-    ...history.map((h) => ({ role: h.role, content: h.content })),
-    { role: 'user', content: question },
-  ];
-
-  const stream = getClient().messages.stream({
-    model: 'claude-opus-4-6',
+  const stream = await getClient().chat.completions.create({
+    model: MODEL(),
     max_tokens: 2048,
-    system: `You are Sidecar, an AI assistant helping analyze an IDOT utility coordination meeting transcript. Answer questions based ONLY on information in the transcript. If something isn't in the transcript, say so clearly. Be concise and cite specific speakers or moments when relevant.
+    stream: true,
+    messages: [
+      {
+        role: 'system',
+        content: `You are Sidecar, an AI assistant helping analyze an IDOT utility coordination meeting transcript. Answer questions based ONLY on information in the transcript. If something isn't in the transcript, say so clearly. Be concise and cite specific speakers or moments when relevant.
 
 MEETING TRANSCRIPT:
 ${transcript}`,
-    messages,
+      },
+      ...history.map((h) => ({ role: h.role, content: h.content })),
+      { role: 'user', content: question },
+    ],
   });
 
-  for await (const event of stream) {
-    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-      yield event.delta.text;
-    }
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
   }
 }

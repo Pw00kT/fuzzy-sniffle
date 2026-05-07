@@ -23,8 +23,8 @@ const settingsFile = path.join(userData, 'settings.json')
 if (fs.existsSync(settingsFile)) {
   try {
     const saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'))
-    if (saved.anthropicApiKey) process.env.ANTHROPIC_API_KEY = saved.anthropicApiKey
-    if (saved.openaiApiKey)    process.env.OPENAI_API_KEY    = saved.openaiApiKey
+    if (saved.perplexityApiKey) process.env.PERPLEXITY_API_KEY = saved.perplexityApiKey
+    if (saved.openaiApiKey)     process.env.OPENAI_API_KEY     = saved.openaiApiKey
   } catch { /* ignore corrupt settings */ }
 }
 

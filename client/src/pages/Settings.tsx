@@ -2,17 +2,17 @@ import { useEffect, useState, FormEvent } from 'react'
 import { Eye, EyeOff, CheckCircle2, AlertCircle, Save } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { api } from '@/lib/api'
 
 interface KeyFieldProps {
   label: string
   description: string
   value: string
   isSet: boolean
+  placeholder?: string
   onChange: (v: string) => void
 }
 
-function KeyField({ label, description, value, isSet, onChange }: KeyFieldProps) {
+function KeyField({ label, description, value, isSet, placeholder = 'pplx-...', onChange }: KeyFieldProps) {
   const [show, setShow] = useState(false)
   return (
     <div className="space-y-1.5">
@@ -30,7 +30,7 @@ function KeyField({ label, description, value, isSet, onChange }: KeyFieldProps)
           type={show ? 'text' : 'password'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={isSet ? '••••••••  (leave blank to keep existing)' : 'sk-...'}
+          placeholder={isSet ? '••••••••  (leave blank to keep existing)' : placeholder}
           className="w-full pr-10 pl-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
         />
         <button
@@ -45,10 +45,15 @@ function KeyField({ label, description, value, isSet, onChange }: KeyFieldProps)
   )
 }
 
+interface SettingsStatus {
+  perplexityKeySet: boolean
+  openaiKeySet: boolean
+}
+
 export default function Settings() {
-  const [anthropicKey, setAnthropicKey] = useState('')
+  const [perplexityKey, setPerplexityKey] = useState('')
   const [openaiKey, setOpenaiKey] = useState('')
-  const [status, setStatus] = useState<{ anthropicKeySet: boolean; openaiKeySet: boolean } | null>(null)
+  const [status, setStatus] = useState<SettingsStatus | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -67,8 +72,8 @@ export default function Settings() {
     setError('')
     try {
       const body: Record<string, string> = {}
-      if (anthropicKey.trim()) body.anthropicApiKey = anthropicKey.trim()
-      if (openaiKey.trim())    body.openaiApiKey    = openaiKey.trim()
+      if (perplexityKey.trim()) body.perplexityApiKey = perplexityKey.trim()
+      if (openaiKey.trim())     body.openaiApiKey     = openaiKey.trim()
 
       const res = await fetch('/api/settings', {
         method: 'POST',
@@ -80,7 +85,7 @@ export default function Settings() {
       }).then((r) => r.json())
 
       setStatus(res)
-      setAnthropicKey('')
+      setPerplexityKey('')
       setOpenaiKey('')
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
@@ -105,26 +110,28 @@ export default function Settings() {
           </CardHeader>
           <CardContent className="space-y-5">
             <KeyField
-              label="Anthropic API Key"
-              description="Powers meeting extraction, risk analysis, action items, and Ask Sidecar chat. Get yours at console.anthropic.com."
-              value={anthropicKey}
-              isSet={status?.anthropicKeySet ?? false}
-              onChange={setAnthropicKey}
+              label="Perplexity API Key"
+              description="Powers meeting extraction, risk analysis, action items, and Ask Sidecar chat. Free for government — get yours at perplexity.ai/api."
+              value={perplexityKey}
+              isSet={status?.perplexityKeySet ?? false}
+              placeholder="pplx-..."
+              onChange={setPerplexityKey}
             />
             <KeyField
-              label="OpenAI API Key"
-              description="Powers audio transcription via Whisper. Get yours at platform.openai.com. Without this, a sample transcript is used."
+              label="OpenAI API Key (optional)"
+              description="Powers audio transcription via Whisper. Without this, a sample transcript is used instead of real transcription."
               value={openaiKey}
               isSet={status?.openaiKeySet ?? false}
+              placeholder="sk-..."
               onChange={setOpenaiKey}
             />
           </CardContent>
         </Card>
 
-        {!status?.anthropicKeySet && (
+        {!status?.perplexityKeySet && (
           <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-            <span>No Anthropic key configured. The app will use mock data for extraction and chat features.</span>
+            <span>No Perplexity key configured. The app will use mock data for extraction and chat features.</span>
           </div>
         )}
 
@@ -139,7 +146,7 @@ export default function Settings() {
           <p className="text-sm text-red-600">{error}</p>
         )}
 
-        <Button type="submit" disabled={saving || (!anthropicKey.trim() && !openaiKey.trim())}>
+        <Button type="submit" disabled={saving || (!perplexityKey.trim() && !openaiKey.trim())}>
           <Save className="w-4 h-4 mr-2" />
           {saving ? 'Saving…' : 'Save keys'}
         </Button>

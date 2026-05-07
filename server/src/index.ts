@@ -22,7 +22,7 @@ app.get('/api/health', (_req, res) => {
     status: 'ok',
     database: process.env.DATABASE_URL ? 'postgres' : 'in-memory',
     transcription: process.env.OPENAI_API_KEY ? 'whisper' : 'mock',
-    ai: process.env.ANTHROPIC_API_KEY ? 'claude' : 'unavailable',
+    ai: process.env.PERPLEXITY_API_KEY ? 'perplexity' : 'unavailable',
     authRequired: !!process.env.AUTH_TOKEN,
   });
 });
@@ -65,7 +65,7 @@ app.listen(PORT, () => {
   console.log(`\n🚀 IDOT Sidecar API running on http://localhost:${PORT}`);
   console.log(`   Database:      ${process.env.DATABASE_URL ? 'PostgreSQL' : 'In-Memory'}`);
   console.log(`   Transcription: ${process.env.OPENAI_API_KEY ? 'Whisper API' : 'Mock'}`);
-  console.log(`   AI:            ${process.env.ANTHROPIC_API_KEY ? 'Claude' : 'Unavailable (no key)'}`);
+  console.log(`   AI:            ${process.env.PERPLEXITY_API_KEY ? 'Perplexity' : 'Unavailable (no key)'}`);
   console.log(`   Auth:          ${process.env.AUTH_TOKEN ? 'Enabled' : 'Disabled (no AUTH_TOKEN)'}\n`);
 });
 
