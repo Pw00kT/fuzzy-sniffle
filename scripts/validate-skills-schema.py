@@ -4513,11 +4513,16 @@ def main() -> int:
             result = validate_skill(target, tier)
             if "fatal" in result:
                 if json_mode:
-                    import json as json_module
-                    print(json_module.dumps([{
-                        "path": str(target),
-                        "fatal": result["fatal"],
-                    }]))
+                    print(
+                        json_module.dumps(
+                            [
+                                {
+                                    "path": str(target),
+                                    "fatal": result["fatal"],
+                                }
+                            ]
+                        )
+                    )
                 else:
                     print(f"❌ FATAL: {result['fatal']}")
                 return 1
@@ -4527,18 +4532,23 @@ def main() -> int:
             letter = grade_info.get("grade", "F")
 
             if json_mode:
-                import json as json_module
-                print(json_module.dumps([{
-                    "path": str(target),
-                    "tier": tier,
-                    "schema_version": SCHEMA_VERSION,
-                    "score": score,
-                    "grade": letter,
-                    "errors": result.get("errors", []),
-                    "warnings": result.get("warnings", []),
-                    "infos": result.get("infos", []),
-                    "breakdown": grade_info.get("breakdown", {}),
-                }]))
+                print(
+                    json_module.dumps(
+                        [
+                            {
+                                "path": str(target),
+                                "tier": tier,
+                                "schema_version": SCHEMA_VERSION,
+                                "score": score,
+                                "grade": letter,
+                                "errors": result.get("errors", []),
+                                "warnings": result.get("warnings", []),
+                                "infos": result.get("infos", []),
+                                "breakdown": grade_info.get("breakdown", {}),
+                            }
+                        ]
+                    )
+                )
                 # Skip the terminal grade-table render below; deep-eval (if --deep)
                 # still runs and prints its own JSON via the existing block.
                 if not args.deep:
