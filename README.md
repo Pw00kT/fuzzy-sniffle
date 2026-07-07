@@ -1,112 +1,47 @@
-# IDOT Sidecar — Utility Coordination Meeting Assistant
+# IDOT Sidecar — Live Meeting Assistant
 
-An AI-powered assistant for Illinois Department of Transportation (IDOT) utility coordination meetings. Records or ingests audio, transcribes with OpenAI Whisper, extracts structured project data with Claude, and lets you chat with the meeting transcript.
+A single self-contained HTML file that listens to an IDOT utility coordination meeting in real time, transcribes it live in the browser, and surfaces AI coaching tips as the conversation happens — no install, no server, no build step.
 
-## Features
-
-- **Record live meetings** — in-browser MediaRecorder with real-time audio visualization and live Claude coaching tips
-- **Upload audio files** — drag-and-drop MP3/WAV/M4A/MP4/OGG/WebM with progress tracking
-- **Automatic extraction** — Claude analyzes the transcript and extracts utility conflicts, action items, risks, key decisions, and project metadata
-- **Ask Sidecar** — streaming chat interface to ask questions against any meeting's transcript
-- **Works without API keys** — falls back to mock data throughout; no database required to run
+Built for coordinators on locked-down government machines: no Node.js, no Docker, no admin rights required. Just open the file in Chrome or Edge.
 
 ## Quick Start
 
-```bash
-# 1. Clone and install
-git clone https://github.com/Pw00kT/fuzzy-sniffle
-cd fuzzy-sniffle
-npm install
+1. Download `idot-sidecar.html` (or open it directly from SharePoint / email / USB)
+2. Double-click to open it in **Chrome** or **Edge** (required — live transcription uses the browser's built-in Speech Recognition API, which only these two support)
+3. Click **Settings**, paste in a GitHub Personal Access Token from an account with Copilot enabled, and save
+4. Click **Start Listening**, grant microphone access when prompted
+5. Speak/listen — the transcript fills in live on the right, and coaching tips appear on the left every ~30 seconds
+6. Click **Export** any time to copy the transcript + insights to your clipboard, or use Stop and re-Export later
 
-# 2. (Optional) Configure API keys
-cp .env.example .env
-# Edit .env and add ANTHROPIC_API_KEY and OPENAI_API_KEY
+No account is required to use live transcription — that part works with zero configuration. AI coaching only activates once a GitHub token is saved.
 
-# 3. Run
-npm run dev
-# Frontend: http://localhost:5173
-# Backend:  http://localhost:3001
-```
+## How it works
 
-## Environment Variables
-
-| Variable | Required | Description |
+| Capability | Implementation | Why |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | No* | Enables real Claude extraction, coaching, and chat |
-| `OPENAI_API_KEY` | No* | Enables real Whisper transcription |
-| `DATABASE_URL` | No* | PostgreSQL connection string (e.g. `postgres://user:pass@localhost:5432/idot`) |
-| `PORT` | No | Backend port (default: `3001`) |
-| `UPLOAD_DIR` | No | Directory for uploaded audio files (default: `./uploads`) |
+| Live transcription | Browser `SpeechRecognition` API | Built into Chrome/Edge, free, real-time, no API key, nothing leaves the device except the periodic coaching request |
+| AI coaching | GitHub Copilot Chat Completions API | Most orgs already have Copilot licensed; one token, no separate billing |
+| Storage | `localStorage` | No database, no server; meeting history and settings persist across sessions on that device only |
+| Distribution | One `.html` file | Email it, host it on SharePoint, put it on a USB stick — no installer, no npm |
 
-*Without these, the app uses built-in mock data and mock AI responses.
+There is no backend. The file talks directly to `https://api.githubcopilot.com` from the browser using the token you provide; that token never leaves your machine except in requests to GitHub's API.
 
-## Architecture
+## Settings
 
-```
-fuzzy-sniffle/
-├── client/                  React 18 + Vite + Tailwind CSS frontend
-│   └── src/
-│       ├── pages/           Dashboard, RecordMeeting, UploadAudio, MeetingDetail
-│       ├── lib/             API client, types, mock data, utilities
-│       └── components/      Layout, Sidebar, shadcn/ui wrappers
-└── server/                  Node.js + Express + TypeScript backend
-    └── src/
-        ├── routes/          meetings, upload, chat
-        ├── services/        claude.ts, whisper.ts
-        └── db/              PostgreSQL client + in-memory fallback
-```
+Opened via the **Settings** button in the header:
 
-### Data flow
+- **GitHub Token** — a Personal Access Token from [github.com/settings/tokens](https://github.com/settings/tokens). No special scopes are required if Copilot is enabled for your account/org. Stored only in `localStorage`.
+- **Coaching model** — `gpt-4o` (default), `gpt-4o-mini` (faster/cheaper), or `o1-mini` (deeper reasoning)
+- **Coaching interval** — how often the app sends recent transcript to Copilot for a tip (15s / 30s / 60s)
+- **Recent meetings** — the last 5 meetings are kept locally for reference; clearable at any time
 
-```
-Audio file / Live recording
-    │
-    ▼
-POST /api/upload  ──►  OpenAI Whisper (transcription)
-                            │
-                            ▼
-                       Claude claude-opus-4-6 (extraction)
-                            │  utilities, actions, risks, decisions
-                            ▼
-                       PostgreSQL / in-memory store
-                            │
-                            ▼
-                 GET /api/meetings/:id  ──►  React Meeting Detail page
-                                                 │
-                                                 ▼
-                                          POST /api/meetings/:id/chat
-                                          (SSE streaming via Claude)
-```
+## Limitations
 
-## PostgreSQL Setup (optional)
+- Live transcription requires Chrome or Edge (Firefox and Safari don't implement `SpeechRecognition`)
+- Speaker labels are heuristic (based on pause length between turns), not true diarization
+- Designed for microphone-captured audio — for meetings joined entirely through a headset or phone bridge where you can hear all participants, this works well; capturing a remote participant's audio directly from a video call tab is a possible future enhancement via `getDisplayMedia`
+- No cross-device sync — meeting history lives in that browser's local storage only
 
-```sql
--- Run the schema against your database
-psql $DATABASE_URL -f server/src/db/schema.sql
-```
+## Development
 
-Then set `DATABASE_URL` in your `.env`. The app auto-detects whether to use PostgreSQL or the in-memory store at startup.
-
-## Available Scripts
-
-| Command | Description |
-|---|---|
-| `npm run dev` | Start both frontend and backend in watch mode |
-| `npm run build` | Build frontend (Vite) and compile backend (tsc) |
-| `npm start` | Run the compiled production build |
-
-## Pages
-
-| Route | Page | Description |
-|---|---|---|
-| `/` | Dashboard | Meeting list, KPI metrics, priority actions and risks |
-| `/record` | Record Meeting | Live audio capture with coaching |
-| `/upload` | Upload Audio | File upload with processing progress |
-| `/meeting/:id` | Meeting Detail | Extracted data, transcript search, Ask Sidecar chat |
-
-## Tech Stack
-
-- **Frontend**: React 18, Vite, Tailwind CSS, shadcn/ui (Radix UI), Wouter, Lucide icons
-- **Backend**: Node.js, Express 4, TypeScript, tsx (dev server)
-- **AI**: Anthropic Claude claude-opus-4-6 (extraction with extended thinking + SSE chat), OpenAI Whisper
-- **Database**: PostgreSQL via `pg`, with a seeded in-memory fallback
+This is intentionally a single static file with no build tooling. To make changes, edit `idot-sidecar.html` directly and open it in a browser to test — no `npm install`, no dev server.

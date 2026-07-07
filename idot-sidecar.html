@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IDOT Sidecar — Live Meeting Assistant</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-light: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #3b82f6;
+    --accent-dim: #1d4ed8;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --red: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── Header ─────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  header h1 .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.2s;
+  }
+  header h1 .dot.live { background: var(--red); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  header .actions { display: flex; gap: 8px; }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: filter 0.15s, background 0.15s;
+  }
+  button:hover { filter: brightness(1.15); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-danger { background: var(--red); color: white; }
+  .btn-ghost { background: var(--panel-light); color: var(--text); }
+  .btn-ghost:hover { background: var(--border); }
+
+  /* ─── Layout ─────────────────────────────────────────────── */
+  main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+  .col-left {
+    width: 340px;
+    min-width: 340px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .col-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ─── Left panel: controls + insights ───────────────────── */
+  .control-block {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .mic-level {
+    height: 6px;
+    background: var(--panel-light);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .mic-level-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--green), var(--amber));
+    transition: width 0.1s;
+  }
+  .status-line {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .insights-header {
+    padding: 12px 16px 6px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .insights-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .insight-card {
+    background: var(--panel-light);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: slideIn 0.25s ease-out;
+    position: relative;
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .insight-card .time {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    display: block;
+  }
+  .insight-card .dismiss {
+    position: absolute;
+    top: 6px; right: 6px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 2px 6px;
+    line-height: 1;
+  }
+  .insight-empty {
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 20px 4px;
+    text-align: center;
+  }
+
+  /* ─── Right panel: transcript ────────────────────────────── */
+  .transcript-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .transcript-header input {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    width: 60%;
+  }
+  .transcript-header input:focus { outline: none; border-bottom: 1px solid var(--accent); }
+  .transcript-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .segment { max-width: 720px; }
+  .segment .meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 3px;
+    display: flex;
+    gap: 8px;
+  }
+  .segment .speaker { font-weight: 700; color: var(--accent); }
+  .segment .text { font-size: 14px; line-height: 1.6; }
+  .segment.interim .text { color: var(--text-dim); font-style: italic; }
+  .transcript-empty {
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 60px;
+    font-size: 14px;
+  }
+
+  /* ─── Settings Modal ─────────────────────────────────────── */
+  .modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: 440px;
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  .modal h2 { font-size: 16px; margin-bottom: 16px; }
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .field input, .field select {
+    width: 100%;
+    padding: 9px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .field .hint { font-size: 11px; color: var(--text-dim); margin-top: 5px; line-height: 1.4; }
+  .field .hint a { color: var(--accent); }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  /* ─── History drawer ─────────────────────────────────────── */
+  .history-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .history-item {
+    padding: 8px 10px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-item:hover { background: var(--panel-light); }
+  .history-item .date { color: var(--text-dim); }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .toast {
+    position: fixed;
+    bottom: 20px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="dot" id="liveDot"></span> IDOT Sidecar</h1>
+  <div class="actions">
+    <button class="btn-ghost" id="exportBtn">Export</button>
+    <button class="btn-ghost" id="settingsBtn">Settings</button>
+    <button class="btn-primary" id="startBtn">Start Listening</button>
+  </div>
+</header>
+
+<main>
+  <div class="col-left">
+    <div class="control-block">
+      <div class="status-line" id="statusLine">Idle — click Start Listening</div>
+      <div class="mic-level"><div class="mic-level-fill" id="micLevelFill"></div></div>
+    </div>
+    <div class="insights-header">Live Coaching</div>
+    <div class="insights-list" id="insightsList">
+      <div class="insight-empty">Insights will appear here once the meeting starts and enough context has been captured.</div>
+    </div>
+  </div>
+
+  <div class="col-right">
+    <div class="transcript-header">
+      <input id="meetingTitle" placeholder="Untitled meeting — click to name it" value="">
+      <span style="font-size:12px;color:var(--text-dim)" id="wordCount">0 words</span>
+    </div>
+    <div class="transcript-body" id="transcriptBody">
+      <div class="transcript-empty">Live transcript will appear here.<br>Click "Start Listening" to begin.</div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="settingsModal">
+  <div class="modal">
+    <h2>Settings</h2>
+
+    <div class="field">
+      <label>GitHub Token (Copilot)</label>
+      <input type="password" id="ghToken" placeholder="ghp_...">
+      <div class="hint">
+        Personal Access Token for a GitHub account with Copilot enabled.
+        Create one at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> — no special scopes required.
+        Stored only in this browser's local storage; never sent anywhere but GitHub's API.
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Coaching model</label>
+      <select id="modelSelect">
+        <option value="gpt-4o">gpt-4o (default)</option>
+        <option value="gpt-4o-mini">gpt-4o-mini (faster/cheaper)</option>
+        <option value="o1-mini">o1-mini (deeper reasoning)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Coaching interval</label>
+      <select id="intervalSelect">
+        <option value="15000">Every 15 seconds</option>
+        <option value="30000" selected>Every 30 seconds</option>
+        <option value="60000">Every 60 seconds</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Recent meetings (stored locally on this device)</label>
+      <div class="history-list" id="historyList"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" id="clearHistoryBtn">Clear history</button>
+      <button class="btn-primary" id="saveSettingsBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ─── Storage helpers ────────────────────────────────────────────────
+  const LS = {
+    token: 'idot_gh_token',
+    model: 'idot_model',
+    interval: 'idot_interval',
+    history: 'idot_history',
+  };
+
+  function loadSettings() {
+    document.getElementById('ghToken').value = localStorage.getItem(LS.token) || '';
+    document.getElementById('modelSelect').value = localStorage.getItem(LS.model) || 'gpt-4o';
+    document.getElementById('intervalSelect').value = localStorage.getItem(LS.interval) || '30000';
+  }
+
+  function getToken() { return localStorage.getItem(LS.token) || ''; }
+  function getModel() { return localStorage.getItem(LS.model) || 'gpt-4o'; }
+  function getInterval() { return parseInt(localStorage.getItem(LS.interval) || '30000', 10); }
+
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem(LS.history) || '[]'); }
+    catch { return []; }
+  }
+  function saveMeetingToHistory(meeting) {
+    const hist = getHistory();
+    hist.unshift(meeting);
+    localStorage.setItem(LS.history, JSON.stringify(hist.slice(0, 5)));
+  }
+
+  // ─── Toast ──────────────────────────────────────────────────────────
+  let toastTimer = null;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  }
+
+  // ─── State ──────────────────────────────────────────────────────────
+  let running = false;
+  let recognition = null;
+  let audioContext = null;
+  let analyser = null;
+  let micStream = null;
+  let levelRAF = null;
+  let coachingTimer = null;
+  let lastCoachedAt = 0;
+  let meetingStartTime = null;
+
+  const segments = []; // { speaker, text, ts }
+  let currentSpeaker = 'Speaker A';
+  let lastFinalTime = 0;
+  const SPEAKER_NAMES = ['Speaker A', 'Speaker B', 'Speaker C', 'Speaker D'];
+  let speakerIdx = 0;
+  const TURN_GAP_MS = 4000;
+
+  const IDOT_COACHING_SYSTEM = `You are a real-time coaching assistant for IDOT (Illinois Department of Transportation) utility coordination meetings. Based on the recent discussion, provide ONE brief, actionable coaching tip (2-3 sentences max) about IDOT-specific processes, utility coordination requirements, letting timelines, right-of-way issues, or common meeting pitfalls. Only respond if there is something genuinely useful to add. If nothing specific is needed right now, respond with exactly: NO_COACHING_NEEDED`;
+
+  // ─── Speech Recognition (live transcript, free, in-browser) ───────────
+  function getRecognitionCtor() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition;
+  }
+
+  function startRecognition() {
+    const Ctor = getRecognitionCtor();
+    if (!Ctor) {
+      toast('Speech recognition is not supported in this browser. Use Chrome or Edge.');
+      return false;
+    }
+    recognition = new Ctor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      let interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        const text = result[0].transcript.trim();
+        if (!text) continue;
+        if (result.isFinal) {
+          appendFinalSegment(text);
+        } else {
+          interimText += text + ' ';
+        }
+      }
+      renderInterim(interimText.trim());
+    };
+
+    recognition.onerror = (e) => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      console.error('Speech recognition error:', e.error);
+      if (e.error === 'not-allowed') {
+        toast('Microphone access denied. Check browser permissions.');
+        stopListening();
+      }
+    };
+
+    recognition.onend = () => {
+      // Browsers auto-stop after silence/timeouts — restart seamlessly while running
+      if (running) {
+        try { recognition.start(); } catch { /* already starting */ }
+      }
+    };
+
+    try {
+      recognition.start();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  }
+
+  function appendFinalSegment(text) {
+    const now = Date.now();
+    if (now - lastFinalTime >= TURN_GAP_MS && segments.length > 0) {
+      speakerIdx = (speakerIdx + 1) % SPEAKER_NAMES.length;
+    }
+    lastFinalTime = now;
+    currentSpeaker = SPEAKER_NAMES[speakerIdx];
+
+    segments.push({ speaker: currentSpeaker, text, ts: now });
+    renderTranscript();
+    maybeScheduleCoaching();
+  }
+
+  function renderInterim(text) {
+    const body = document.getElementById('transcriptBody');
+    let interimEl = document.getElementById('interimSegment');
+    if (!text) {
+      if (interimEl) interimEl.remove();
+      return;
+    }
+    if (!interimEl) {
+      interimEl = document.createElement('div');
+      interimEl.id = 'interimSegment';
+      interimEl.className = 'segment interim';
+      body.appendChild(interimEl);
+    }
+    interimEl.innerHTML = `<div class="meta"><span class="speaker">${currentSpeaker}</span></div><div class="text">${escapeHtml(text)}</div>`;
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function renderTranscript() {
+    const body = document.getElementById('transcriptBody');
+    const emptyMsg = body.querySelector('.transcript-empty');
+    if (emptyMsg) emptyMsg.remove();
+
+    body.innerHTML = segments.map(seg => `
+      <div class="segment">
+        <div class="meta"><span class="speaker">${escapeHtml(seg.speaker)}</span><span>${formatTime(seg.ts)}</span></div>
+        <div class="text">${escapeHtml(seg.text)}</div>
+      </div>
+    `).join('');
+    body.scrollTop = body.scrollHeight;
+    document.getElementById('wordCount').textContent =
+      segments.reduce((n, s) => n + s.text.split(/\s+/).filter(Boolean).length, 0) + ' words';
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function formatTime(ts) {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  // ─── Mic level meter (visual feedback only, uses Web Audio API) ──────
+  async function startLevelMeter() {
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioContext.createMediaStreamSource(micStream);
+      source.connect(analyser);
+
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const fill = document.getElementById('micLevelFill');
+
+      function tick() {
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        fill.style.width = Math.min(100, (avg / 128) * 100) + '%';
+        levelRAF = requestAnimationFrame(tick);
+      }
+      tick();
+    } catch (err) {
+      console.warn('Mic level meter unavailable:', err);
+    }
+  }
+
+  function stopLevelMeter() {
+    if (levelRAF) cancelAnimationFrame(levelRAF);
+    levelRAF = null;
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (audioContext) { audioContext.close().catch(() => {}); audioContext = null; }
+    document.getElementById('micLevelFill').style.width = '0%';
+  }
+
+  // ─── Coaching (Copilot) ─────────────────────────────────────────────
+  function maybeScheduleCoaching() {
+    if (!running) return;
+    const interval = getInterval();
+    const now = Date.now();
+    if (now - lastCoachedAt < interval) return;
+    lastCoachedAt = now;
+    requestCoaching();
+  }
+
+  async function requestCoaching() {
+    const token = getToken();
+    if (!token) return; // silently skip if no key configured
+
+    const recentText = segments.slice(-12).map(s => `${s.speaker}: ${s.text}`).join('\n');
+    if (!recentText.trim()) return;
+
+    try {
+      const res = await fetch('https://api.githubcopilot.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Copilot-Integration-Id': 'idot-sidecar',
+          'Editor-Version': 'idot-sidecar/1.0.0',
+        },
+        body: JSON.stringify({
+          model: getModel(),
+          max_tokens: 180,
+          messages: [
+            { role: 'system', content: IDOT_COACHING_SYSTEM },
+            { role: 'user', content: `Recent meeting discussion:\n\n${recentText}` },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) toast('GitHub token invalid or Copilot not enabled for this account.');
+        console.error('Copilot request failed:', res.status, await res.text().catch(() => ''));
+        return;
+      }
+
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (text && text !== 'NO_COACHING_NEEDED') {
+        addInsight(text);
+      }
+    } catch (err) {
+      console.error('Coaching request error:', err);
+    }
+  }
+
+  function addInsight(text) {
+    const list = document.getElementById('insightsList');
+    const empty = list.querySelector('.insight-empty');
+    if (empty) empty.remove();
+
+    const card = document.createElement('div');
+    card.className = 'insight-card';
+    card.innerHTML = `
+      <button class="dismiss" title="Dismiss">&times;</button>
+      <span class="time">${formatTime(Date.now())}</span>
+      ${escapeHtml(text)}
+    `;
+    card.querySelector('.dismiss').onclick = () => card.remove();
+    list.prepend(card);
+  }
+
+  // ─── Start / Stop ───────────────────────────────────────────────────
+  function startListening() {
+    if (running) return;
+    const ok = startRecognition();
+    if (!ok) return;
+
+    running = true;
+    meetingStartTime = Date.now();
+    lastCoachedAt = 0;
+    document.getElementById('liveDot').classList.add('live');
+    document.getElementById('startBtn').textContent = 'Stop Listening';
+    document.getElementById('startBtn').classList.remove('btn-primary');
+    document.getElementById('startBtn').classList.add('btn-danger');
+    document.getElementById('statusLine').textContent = 'Listening…';
+    startLevelMeter();
+  }
+
+  function stopListening() {
+    running = false;
+    if (recognition) {
+      try { recognition.stop(); } catch {}
+      recognition = null;
+    }
+    stopLevelMeter();
+    document.getElementById('liveDot').classList.remove('live');
+    document.getElementById('startBtn').textContent = 'Start Listening';
+    document.getElementById('startBtn').classList.remove('btn-danger');
+    document.getElementById('startBtn').classList.add('btn-primary');
+    document.getElementById('statusLine').textContent = segments.length
+      ? 'Stopped — transcript preserved below.'
+      : 'Idle — click Start Listening';
+
+    if (segments.length > 0) {
+      const title = document.getElementById('meetingTitle').value.trim() || 'Untitled meeting';
+      saveMeetingToHistory({
+        title,
+        date: new Date(meetingStartTime || Date.now()).toISOString(),
+        wordCount: segments.reduce((n, s) => n + s.text.split(/\s+/).filter(Boolean).length, 0),
+        segments: segments.slice(),
+      });
+      renderHistory();
+    }
+  }
+
+  // ─── Export ─────────────────────────────────────────────────────────
+  function exportMeeting() {
+    const title = document.getElementById('meetingTitle').value.trim() || 'Untitled meeting';
+    const dateStr = new Date(meetingStartTime || Date.now()).toLocaleString();
+    let out = `${title}\n${dateStr}\n${'='.repeat(40)}\n\nTRANSCRIPT\n\n`;
+    out += segments.map(s => `[${formatTime(s.ts)}] ${s.speaker}: ${s.text}`).join('\n');
+
+    const insightEls = document.querySelectorAll('.insight-card');
+    if (insightEls.length) {
+      out += `\n\n${'='.repeat(40)}\n\nCOACHING INSIGHTS\n\n`;
+      insightEls.forEach(el => {
+        const time = el.querySelector('.time').textContent;
+        const text = el.textContent.replace(time, '').replace('×', '').trim();
+        out += `[${time}] ${text}\n\n`;
+      });
+    }
+
+    navigator.clipboard.writeText(out).then(() => {
+      toast('Meeting notes copied to clipboard.');
+    }).catch(() => {
+      // Fallback: open print dialog
+      const w = window.open('', '_blank');
+      w.document.write(`<pre style="white-space:pre-wrap;font-family:sans-serif;padding:20px;">${escapeHtml(out)}</pre>`);
+      w.document.close();
+      w.print();
+    });
+  }
+
+  // ─── History rendering ──────────────────────────────────────────────
+  function renderHistory() {
+    const list = document.getElementById('historyList');
+    const hist = getHistory();
+    if (!hist.length) {
+      list.innerHTML = '<div class="history-item" style="color:var(--text-dim)">No meetings yet</div>';
+      return;
+    }
+    list.innerHTML = hist.map((m, i) => `
+      <div class="history-item" data-idx="${i}">
+        <span>${escapeHtml(m.title)} (${m.wordCount} words)</span>
+        <span class="date">${new Date(m.date).toLocaleDateString()}</span>
+      </div>
+    `).join('');
+  }
+
+  // ─── Settings modal ─────────────────────────────────────────────────
+  function openSettings() {
+    loadSettings();
+    renderHistory();
+    document.getElementById('settingsModal').classList.add('open');
+  }
+  function closeSettings() {
+    document.getElementById('settingsModal').classList.remove('open');
+  }
+  function saveSettings() {
+    localStorage.setItem(LS.token, document.getElementById('ghToken').value.trim());
+    localStorage.setItem(LS.model, document.getElementById('modelSelect').value);
+    localStorage.setItem(LS.interval, document.getElementById('intervalSelect').value);
+    closeSettings();
+    toast('Settings saved.');
+  }
+
+  // ─── Wire up events ─────────────────────────────────────────────────
+  document.getElementById('startBtn').addEventListener('click', () => {
+    running ? stopListening() : startListening();
+  });
+  document.getElementById('exportBtn').addEventListener('click', exportMeeting);
+  document.getElementById('settingsBtn').addEventListener('click', openSettings);
+  document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+  document.getElementById('settingsModal').addEventListener('click', (e) => {
+    if (e.target.id === 'settingsModal') closeSettings();
+  });
+  document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+    localStorage.removeItem(LS.history);
+    renderHistory();
+    toast('History cleared.');
+  });
+
+  window.addEventListener('beforeunload', (e) => {
+    if (running && segments.length > 0) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
+  // ─── Init ───────────────────────────────────────────────────────────
+  loadSettings();
+  renderHistory();
+  if (!getToken()) {
+    setTimeout(() => toast('Tip: open Settings to add your GitHub token for live coaching.'), 800);
+  }
+})();
+</script>
+</body>
+</html>
