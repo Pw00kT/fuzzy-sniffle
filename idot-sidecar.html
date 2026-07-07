@@ -324,8 +324,10 @@
   <h1><span class="dot" id="liveDot"></span> IDOT Sidecar</h1>
   <div class="actions">
     <select class="source-select" id="sourceSelect" title="What to transcribe">
-      <option value="mic">Mic only</option>
-      <option value="mic+tab">Mic + meeting tab</option>
+      <option value="headset">Headset — just me</option>
+      <option value="room">Room / speakerphone</option>
+      <option value="tab">Mic + meeting tab</option>
+      <option value="screen">Mic + computer audio</option>
     </select>
     <button class="btn-ghost" id="exportBtn">Export</button>
     <button class="btn-ghost" id="settingsBtn">Settings</button>
@@ -361,12 +363,44 @@
     <h2>Settings</h2>
 
     <div class="field">
-      <label>GitHub Token (Copilot)</label>
-      <input type="password" id="ghToken" placeholder="ghp_...">
-      <div class="hint">
-        Personal Access Token for a GitHub account with Copilot enabled.
-        Create one at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> — no special scopes required.
-        Stored only in this browser's local storage; never sent anywhere but GitHub's API.
+      <label>AI provider</label>
+      <select id="providerSelect">
+        <option value="github">GitHub Copilot</option>
+        <option value="m365">Microsoft 365 Copilot</option>
+      </select>
+      <div class="hint" id="providerHint"></div>
+    </div>
+
+    <div id="githubFields">
+      <div class="field">
+        <label>GitHub Token (Copilot)</label>
+        <input type="password" id="ghToken" placeholder="ghp_...">
+        <div class="hint">
+          Personal Access Token for a GitHub account with Copilot enabled.
+          Create one at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> — no special scopes required.
+          Stored only in this browser's local storage; never sent anywhere but GitHub's API.
+        </div>
+      </div>
+    </div>
+
+    <div id="m365Fields" style="display:none">
+      <div class="field">
+        <label>Entra Tenant ID</label>
+        <input type="text" id="m365Tenant" placeholder="contoso.onmicrosoft.com or GUID">
+      </div>
+      <div class="field">
+        <label>App (Client) ID</label>
+        <input type="text" id="m365Client" placeholder="00000000-0000-0000-0000-000000000000">
+        <div class="hint">
+          From your IT department's one-time Entra app registration (single-page
+          application platform, redirect URI = this page's URL, delegated Copilot
+          Chat API permissions with admin consent). Requires a Microsoft 365
+          Copilot license on your account.
+        </div>
+      </div>
+      <div class="field">
+        <button type="button" class="btn-ghost" id="m365SignInBtn">Sign in to Microsoft 365</button>
+        <span class="hint" id="m365Status" style="display:inline-block;margin-left:8px"></span>
       </div>
     </div>
 
@@ -412,17 +446,45 @@
     model: 'idot_model',
     interval: 'idot_interval',
     history: 'idot_history',
+    provider: 'idot_ai_provider',
+    m365Tenant: 'idot_m365_tenant',
+    m365Client: 'idot_m365_client',
+    m365Pkce: 'idot_m365_pkce',
   };
+
+  // Microsoft 365 Copilot needs an https origin for its OAuth redirect —
+  // impossible when the file is opened directly from disk.
+  const M365_AVAILABLE = location.protocol === 'https:';
+
+  function applyProviderVisibility() {
+    const provider = document.getElementById('providerSelect').value;
+    document.getElementById('githubFields').style.display = provider === 'github' ? '' : 'none';
+    document.getElementById('m365Fields').style.display = provider === 'm365' ? '' : 'none';
+    document.getElementById('providerHint').textContent = M365_AVAILABLE ? '' :
+      'Microsoft 365 Copilot requires this file to be hosted over https (e.g. on SharePoint) — ask IT. GitHub Copilot works from anywhere.';
+  }
 
   function loadSettings() {
     document.getElementById('ghToken').value = localStorage.getItem(LS.token) || '';
     document.getElementById('modelSelect').value = localStorage.getItem(LS.model) || 'gpt-4o';
     document.getElementById('intervalSelect').value = localStorage.getItem(LS.interval) || '30000';
+    document.getElementById('providerSelect').value = getProvider();
+    document.getElementById('m365Tenant').value = localStorage.getItem(LS.m365Tenant) || '';
+    document.getElementById('m365Client').value = localStorage.getItem(LS.m365Client) || '';
+    if (!M365_AVAILABLE) {
+      document.querySelector('#providerSelect option[value="m365"]').disabled = true;
+    }
+    applyProviderVisibility();
+    updateM365Status();
   }
 
   function getToken() { return localStorage.getItem(LS.token) || ''; }
   function getModel() { return localStorage.getItem(LS.model) || 'gpt-4o'; }
   function getInterval() { return parseInt(localStorage.getItem(LS.interval) || '30000', 10); }
+  function getProvider() {
+    const p = localStorage.getItem(LS.provider) || 'github';
+    return p === 'm365' && !M365_AVAILABLE ? 'github' : p;
+  }
 
   function getHistory() {
     try { return JSON.parse(localStorage.getItem(LS.history) || '[]'); }
@@ -459,14 +521,23 @@
 
   const segments = []; // { speaker, text, ts, source }
   const TURN_GAP_MS = 4000;
-  // The mic is always the coordinator ("You"). Tab audio rotates Remote A–D
-  // on pause gaps — heuristic turn detection, tracked separately per source.
-  const tabSpeakers = {
-    names: ['Remote A', 'Remote B', 'Remote C', 'Remote D'],
-    idx: 0,
-    lastFinalTime: 0,
-    hasSpoken: false,
+
+  // What the mic represents, and what (if anything) to capture alongside it
+  const SOURCE_MODES = {
+    headset: { micLabels: 'you',    capture: null },     // coordinator alone on a headset
+    room:    { micLabels: 'rotate', capture: null },     // in-person / speakerphone / operator on a phone
+    tab:     { micLabels: 'you',    capture: 'tab' },    // web meeting clients in a browser tab
+    screen:  { micLabels: 'you',    capture: 'screen' }, // desktop meeting apps via system audio (Windows)
   };
+  let sourceMode = SOURCE_MODES.headset;
+
+  // Heuristic turn detection: rotate to the next name after a pause gap.
+  // Tracked separately per audio source so mic and capture don't interfere.
+  function makeSpeakerRotation(names) {
+    return { names, idx: 0, lastFinalTime: 0, hasSpoken: false };
+  }
+  const remoteSpeakers = makeSpeakerRotation(['Remote A', 'Remote B', 'Remote C', 'Remote D']);
+  const roomSpeakers = makeSpeakerRotation(['Speaker A', 'Speaker B', 'Speaker C', 'Speaker D']);
 
   const IDOT_COACHING_SYSTEM = `You are a real-time coaching assistant for IDOT (Illinois Department of Transportation) utility coordination meetings. Based on the recent discussion, provide ONE brief, actionable coaching tip (2-3 sentences max) about IDOT-specific processes, utility coordination requirements, letting timelines, right-of-way issues, or common meeting pitfalls. Only respond if there is something genuinely useful to add. If nothing specific is needed right now, respond with exactly: NO_COACHING_NEEDED`;
 
@@ -530,19 +601,26 @@
     };
   }
 
+  function rotationFor(source) {
+    if (source === 'tab') return remoteSpeakers; // captured audio (tab or system)
+    return sourceMode.micLabels === 'rotate' ? roomSpeakers : null;
+  }
+
   function labelFor(source) {
-    if (source === 'mic') return 'You';
+    const rot = rotationFor(source);
+    if (!rot) return 'You';
     const now = Date.now();
-    if (tabSpeakers.hasSpoken && now - tabSpeakers.lastFinalTime >= TURN_GAP_MS) {
-      tabSpeakers.idx = (tabSpeakers.idx + 1) % tabSpeakers.names.length;
+    if (rot.hasSpoken && now - rot.lastFinalTime >= TURN_GAP_MS) {
+      rot.idx = (rot.idx + 1) % rot.names.length;
     }
-    tabSpeakers.lastFinalTime = now;
-    tabSpeakers.hasSpoken = true;
-    return tabSpeakers.names[tabSpeakers.idx];
+    rot.lastFinalTime = now;
+    rot.hasSpoken = true;
+    return rot.names[rot.idx];
   }
 
   function currentLabel(source) {
-    return source === 'mic' ? 'You' : tabSpeakers.names[tabSpeakers.idx];
+    const rot = rotationFor(source);
+    return rot ? rot.names[rot.idx] : 'You';
   }
 
   function appendFinalSegment(text, source) {
@@ -646,39 +724,13 @@
   }
 
   async function requestCoaching() {
-    const token = getToken();
-    if (!token) return; // silently skip if no key configured
-
     const recentText = segments.slice(-12).map(s => `${s.speaker}: ${s.text}`).join('\n');
     if (!recentText.trim()) return;
 
     try {
-      const res = await fetch('https://api.githubcopilot.com/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Copilot-Integration-Id': 'idot-sidecar',
-          'Editor-Version': 'idot-sidecar/1.0.0',
-        },
-        body: JSON.stringify({
-          model: getModel(),
-          max_tokens: 180,
-          messages: [
-            { role: 'system', content: IDOT_COACHING_SYSTEM },
-            { role: 'user', content: `Recent meeting discussion:\n\n${recentText}` },
-          ],
-        }),
-      });
-
-      if (!res.ok) {
-        if (res.status === 401) toast('GitHub token invalid or Copilot not enabled for this account.');
-        console.error('Copilot request failed:', res.status, await res.text().catch(() => ''));
-        return;
-      }
-
-      const data = await res.json();
-      const text = data.choices?.[0]?.message?.content?.trim();
+      const text = getProvider() === 'm365'
+        ? await m365GetInsight(recentText)
+        : await githubGetInsight(recentText);
       if (text && text !== 'NO_COACHING_NEEDED') {
         addInsight(text);
       }
@@ -686,6 +738,194 @@
       console.error('Coaching request error:', err);
     }
   }
+
+  // ── Provider: GitHub Copilot ──
+  async function githubGetInsight(recentText) {
+    const token = getToken();
+    if (!token) return null; // silently skip if no key configured
+
+    const res = await fetch('https://api.githubcopilot.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Copilot-Integration-Id': 'idot-sidecar',
+        'Editor-Version': 'idot-sidecar/1.0.0',
+      },
+      body: JSON.stringify({
+        model: getModel(),
+        max_tokens: 180,
+        messages: [
+          { role: 'system', content: IDOT_COACHING_SYSTEM },
+          { role: 'user', content: `Recent meeting discussion:\n\n${recentText}` },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) toast('GitHub token invalid or Copilot not enabled for this account.');
+      console.error('Copilot request failed:', res.status, await res.text().catch(() => ''));
+      return null;
+    }
+
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  }
+
+  // ── Provider: Microsoft 365 Copilot (Graph Chat API, Preview) ──
+  // One Copilot conversation per meeting; each coaching request is a turn in
+  // it, so M365 Copilot keeps running context. Web grounding is explicitly
+  // disabled — nothing is sent to web search.
+  const m365 = { accessToken: null, expiresAt: 0, conversationId: null, warned: false };
+
+  // The Chat API requires this full delegated-permission set (per Microsoft docs)
+  const M365_SCOPES = [
+    'Sites.Read.All', 'Mail.Read', 'People.Read.All', 'OnlineMeetingTranscript.Read.All',
+    'Chat.Read', 'ChannelMessage.Read.All', 'ExternalItem.Read.All',
+  ].map(s => `https://graph.microsoft.com/${s}`).join(' ');
+
+  function m365Token() {
+    return m365.accessToken && Date.now() < m365.expiresAt - 60_000 ? m365.accessToken : null;
+  }
+
+  async function m365GetInsight(recentText) {
+    const token = m365Token();
+    if (!token) {
+      if (!m365.warned) {
+        m365.warned = true;
+        toast('Sign in to Microsoft 365 in Settings to enable live coaching.');
+      }
+      return null;
+    }
+
+    const graphHeaders = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    if (!m365.conversationId) {
+      const res = await fetch('https://graph.microsoft.com/beta/copilot/conversations', {
+        method: 'POST', headers: graphHeaders, body: '{}',
+      });
+      if (!res.ok) { m365Fail(res); return null; }
+      m365.conversationId = (await res.json()).id;
+    }
+
+    const res = await fetch(`https://graph.microsoft.com/beta/copilot/conversations/${m365.conversationId}/chat`, {
+      method: 'POST',
+      headers: graphHeaders,
+      body: JSON.stringify({
+        message: { text: `${IDOT_COACHING_SYSTEM}\n\nRecent meeting discussion:\n\n${recentText}` },
+        contextualResources: { webContext: { isWebEnabled: false } },
+      }),
+    });
+    if (!res.ok) { m365Fail(res); return null; }
+
+    const data = await res.json();
+    const reply = (data.messages || [])
+      .filter(m => (m['@odata.type'] || '').includes('copilotConversationResponseMessage'))
+      .pop();
+    return reply?.text?.trim() || null;
+  }
+
+  function m365Fail(res) {
+    if (res.status === 401) {
+      m365.accessToken = null;
+      toast('Microsoft 365 session expired — sign in again in Settings.');
+      updateM365Status();
+    } else if (res.status === 403) {
+      toast('Microsoft 365 Copilot access denied — check your Copilot license and app permissions.');
+    }
+    console.error('M365 Copilot request failed:', res.status);
+    res.text().then(t => console.error(t)).catch(() => {});
+  }
+
+  // ── M365 sign-in: OAuth2 authorization-code + PKCE in a popup ──
+  function b64url(bytes) {
+    return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function randomString(len) {
+    const bytes = new Uint8Array(len);
+    crypto.getRandomValues(bytes);
+    return b64url(bytes).slice(0, len);
+  }
+
+  async function m365SignIn() {
+    const tenant = document.getElementById('m365Tenant').value.trim();
+    const client = document.getElementById('m365Client').value.trim();
+    if (!tenant || !client) { toast('Enter the Tenant ID and Client ID first.'); return; }
+    localStorage.setItem(LS.m365Tenant, tenant);
+    localStorage.setItem(LS.m365Client, client);
+
+    const verifier = randomString(64);
+    const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+    const state = randomString(24);
+    localStorage.setItem(LS.m365Pkce, JSON.stringify({ verifier, state }));
+
+    const params = new URLSearchParams({
+      client_id: client,
+      response_type: 'code',
+      redirect_uri: location.origin + location.pathname,
+      scope: M365_SCOPES,
+      state,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      prompt: 'select_account',
+    });
+    window.open(
+      `https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/authorize?${params}`,
+      'm365auth', 'width=480,height=680'
+    );
+  }
+
+  // Runs in the popup after Entra redirects back to this same page with ?code=
+  async function completeM365Auth() {
+    const query = new URLSearchParams(location.search);
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS.m365Pkce) || '{}');
+      localStorage.removeItem(LS.m365Pkce);
+      if (!saved.verifier || query.get('state') !== saved.state) throw new Error('State mismatch');
+
+      const tenant = localStorage.getItem(LS.m365Tenant) || 'organizations';
+      const res = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: localStorage.getItem(LS.m365Client) || '',
+          grant_type: 'authorization_code',
+          code: query.get('code'),
+          redirect_uri: location.origin + location.pathname,
+          code_verifier: saved.verifier,
+        }),
+      });
+      const data = await res.json();
+      if (!data.access_token) throw new Error(data.error_description || 'Token exchange failed');
+      window.opener.postMessage(
+        { type: 'idot-m365-token', accessToken: data.access_token, expiresIn: data.expires_in },
+        location.origin
+      );
+    } catch (err) {
+      window.opener.postMessage(
+        { type: 'idot-m365-token', error: String((err && err.message) || err) },
+        location.origin
+      );
+    } finally {
+      window.close();
+    }
+  }
+
+  function updateM365Status() {
+    const el = document.getElementById('m365Status');
+    if (el) el.textContent = m365Token() ? 'Signed in ✓' : 'Not signed in';
+  }
+
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== 'idot-m365-token') return;
+    if (e.data.error) { toast('Microsoft sign-in failed: ' + e.data.error); return; }
+    m365.accessToken = e.data.accessToken;
+    m365.expiresAt = Date.now() + (e.data.expiresIn || 3600) * 1000;
+    m365.warned = false;
+    updateM365Status();
+    toast('Signed in to Microsoft 365.');
+  });
 
   function addInsight(text) {
     const list = document.getElementById('insightsList');
@@ -711,23 +951,31 @@
     }
   }
 
-  async function captureTabAudio() {
-    // Returns the tab's audio track, or null (with a toast) on any failure.
+  async function captureMeetingAudio(kind) {
+    // Returns the captured audio track, or null (with a toast) on any failure.
+    // 'tab'    → share a browser tab with its audio (web meeting clients)
+    // 'screen' → share the entire screen with system audio, which captures
+    //            desktop meeting apps (WebEx/Teams/Zoom) — Windows Chrome/Edge
+    const constraints = {
+      video: true, // required for the share picker; stopped immediately below
+      audio: { suppressLocalAudioPlayback: false }, // keep the meeting audible
+    };
+    if (kind === 'screen') constraints.systemAudio = 'include';
+
     let stream;
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true, // required for the share picker; stopped immediately below
-        audio: { suppressLocalAudioPlayback: false }, // keep the meeting audible
-      });
+      stream = await navigator.mediaDevices.getDisplayMedia(constraints);
     } catch {
-      toast('Tab capture cancelled — continuing mic-only.');
+      toast('Capture cancelled — continuing mic-only.');
       return null;
     }
     stream.getVideoTracks().forEach(t => t.stop());
     const track = stream.getAudioTracks()[0];
     if (!track) {
       stream.getTracks().forEach(t => t.stop());
-      toast("No tab audio shared — pick a Chrome tab and tick 'Also share tab audio'. Continuing mic-only.");
+      toast(kind === 'screen'
+        ? "No system audio shared — choose 'Entire screen' and tick 'Also share system audio' (Windows only). Continuing mic-only."
+        : "No tab audio shared — pick a Chrome tab and tick 'Also share tab audio'. Continuing mic-only.");
       return null;
     }
     displayStream = stream;
@@ -742,8 +990,8 @@
     }
 
     starting = true;
-    const wantTab = document.getElementById('sourceSelect').value === 'mic+tab';
-    const tabTrack = wantTab ? await captureTabAudio() : null;
+    sourceMode = SOURCE_MODES[document.getElementById('sourceSelect').value] || SOURCE_MODES.headset;
+    const tabTrack = sourceMode.capture ? await captureMeetingAudio(sourceMode.capture) : null;
     starting = false;
 
     running = true;
@@ -779,13 +1027,15 @@
 
     meetingStartTime = Date.now();
     lastCoachedAt = 0;
+    m365.conversationId = null; // fresh Copilot conversation per meeting
     document.getElementById('liveDot').classList.add('live');
     document.getElementById('startBtn').textContent = 'Stop Listening';
     document.getElementById('startBtn').classList.remove('btn-primary');
     document.getElementById('startBtn').classList.add('btn-danger');
     document.getElementById('sourceSelect').disabled = true;
-    document.getElementById('statusLine').textContent =
-      tabRecognizer ? 'Listening — mic + tab audio' : 'Listening — mic only';
+    document.getElementById('statusLine').textContent = tabRecognizer
+      ? (sourceMode.capture === 'screen' ? 'Listening — mic + computer audio' : 'Listening — mic + tab audio')
+      : (sourceMode.micLabels === 'rotate' ? 'Listening — room audio' : 'Listening — mic only');
     startLevelMeter();
   }
 
@@ -875,6 +1125,9 @@
     localStorage.setItem(LS.token, document.getElementById('ghToken').value.trim());
     localStorage.setItem(LS.model, document.getElementById('modelSelect').value);
     localStorage.setItem(LS.interval, document.getElementById('intervalSelect').value);
+    localStorage.setItem(LS.provider, document.getElementById('providerSelect').value);
+    localStorage.setItem(LS.m365Tenant, document.getElementById('m365Tenant').value.trim());
+    localStorage.setItem(LS.m365Client, document.getElementById('m365Client').value.trim());
     closeSettings();
     toast('Settings saved.');
   }
@@ -886,6 +1139,8 @@
   document.getElementById('exportBtn').addEventListener('click', exportMeeting);
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+  document.getElementById('providerSelect').addEventListener('change', applyProviderVisibility);
+  document.getElementById('m365SignInBtn').addEventListener('click', m365SignIn);
   document.getElementById('settingsModal').addEventListener('click', (e) => {
     if (e.target.id === 'settingsModal') closeSettings();
   });
@@ -903,10 +1158,17 @@
   });
 
   // ─── Init ───────────────────────────────────────────────────────────
-  loadSettings();
-  renderHistory();
-  if (!getToken()) {
-    setTimeout(() => toast('Tip: open Settings to add your GitHub token for live coaching.'), 800);
+  if (window.opener && new URLSearchParams(location.search).get('code')) {
+    // This page is running as the OAuth redirect target inside the sign-in
+    // popup — finish the token exchange and close; the opener gets the token.
+    completeM365Auth();
+  } else {
+    loadSettings();
+    renderHistory();
+    const configured = getProvider() === 'm365' ? !!m365Token() : !!getToken();
+    if (!configured) {
+      setTimeout(() => toast('Tip: open Settings to configure your AI provider for live coaching.'), 800);
+    }
   }
 })();
 </script>

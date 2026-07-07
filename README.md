@@ -6,50 +6,61 @@ Built for coordinators on locked-down government machines: no Node.js, no Docker
 
 ## Quick Start
 
-1. Download `idot-sidecar.html` (or open it directly from SharePoint / email / USB)
-2. Double-click to open it in **Chrome** or **Edge** (required — live transcription uses the browser's built-in Speech Recognition API, which only these two support)
-3. Click **Settings**, paste in a GitHub Personal Access Token from an account with Copilot enabled, and save
-4. Click **Start Listening**, grant microphone access when prompted
-5. Speak/listen — the transcript fills in live on the right, and coaching tips appear on the left every ~30 seconds
-6. Click **Export** any time to copy the transcript + insights to your clipboard, or use Stop and re-Export later
+1. Download `idot-sidecar.html` (or open it from SharePoint / email / USB)
+2. Double-click to open it in **Chrome** or **Edge** (required — live transcription uses the browser's built-in Speech Recognition API)
+3. Click **Settings** and configure your AI provider (see below), then save
+4. Pick the audio mode that matches your meeting (see the matrix below), click **Start Listening**, and grant permissions when prompted
+5. The transcript fills in live on the right; coaching tips appear on the left every ~30 seconds
+6. Click **Export** any time to copy the transcript + insights to your clipboard
 
-No account is required to use live transcription — that part works with zero configuration. AI coaching only activates once a GitHub token is saved.
+Live transcription works with zero configuration — AI coaching activates once a provider is configured.
 
-## How it works
+## Pick the right mode for your meeting
 
-| Capability | Implementation | Why |
+The dropdown next to **Start Listening** tells the app what your audio situation is:
+
+| Mode | When to use it | Who gets labeled what |
 |---|---|---|
-| Live transcription | Browser `SpeechRecognition` API | Built into Chrome/Edge, free, real-time, no API key, nothing leaves the device except the periodic coaching request |
-| AI coaching | GitHub Copilot Chat Completions API | Most orgs already have Copilot licensed; one token, no separate billing |
-| Storage | `localStorage` | No database, no server; meeting history and settings persist across sessions on that device only |
-| Distribution | One `.html` file | Email it, host it on SharePoint, put it on a USB stick — no installer, no npm |
+| **Headset — just me** | You're dialed in alone on a headset and only your side matters | Everything is **You** |
+| **Room / speakerphone** | In-person meetings, phone bridges on speaker, or **an operator running the meeting from an iPhone/Android** on speakerphone in the room | Mic audio rotates **Speaker A–D** on pauses |
+| **Mic + meeting tab** | The meeting runs in a **browser tab** — Teams web, Zoom web, Google Meet, WebEx web | You are **You**; tab audio rotates **Remote A–D** |
+| **Mic + computer audio** | The meeting runs in a **desktop app** — WebEx, Teams, or Zoom clients (Windows only) | You are **You**; system audio rotates **Remote A–D** |
 
-There is no backend. The file talks directly to `https://api.githubcopilot.com` from the browser using the token you provide; that token never leaves your machine except in requests to GitHub's API.
+**Mic + meeting tab**: the share picker opens — choose the *tab* running the meeting and tick **"Also share tab audio."**
 
-## Settings
+**Mic + computer audio**: the share picker opens — choose **Entire screen** and tick **"Also share system audio."** This captures whatever any desktop app is playing, which is how the WebEx/Teams/Zoom desktop clients get transcribed. System-audio capture is available on Windows Chrome/Edge only (not macOS). Use a headset in this mode — on speakers, remote voices also reach your mic and lines can duplicate.
 
-Opened via the **Settings** button in the header:
+In every capture mode, the meeting stays audible, and clicking the browser's "Stop sharing" bar drops back to mic-only without interrupting the session.
 
-- **GitHub Token** — a Personal Access Token from [github.com/settings/tokens](https://github.com/settings/tokens). No special scopes are required if Copilot is enabled for your account/org. Stored only in `localStorage`.
-- **Coaching model** — `gpt-4o` (default), `gpt-4o-mini` (faster/cheaper), or `o1-mini` (deeper reasoning)
-- **Coaching interval** — how often the app sends recent transcript to Copilot for a tip (15s / 30s / 60s)
+## Choosing your AI provider
+
+Both options use licenses your org may already have — pick whichever applies in **Settings → AI provider**:
+
+### GitHub Copilot (default, simplest)
+Paste a Personal Access Token from [github.com/settings/tokens](https://github.com/settings/tokens) — no special scopes needed if Copilot is enabled for your account/org. Works even when the file is opened straight from disk. The token is stored only in this browser's `localStorage` and sent only to GitHub's API.
+
+### Microsoft 365 Copilot
+Uses Microsoft's Copilot Chat API (currently **Preview**) through Microsoft Graph, at no extra cost with an M365 Copilot license. Coaching requests become turns in a per-meeting Copilot conversation, and **web grounding is explicitly disabled** — nothing is sent to web search. Prerequisites (one-time, via IT):
+
+1. A **Microsoft 365 Copilot license** on your account
+2. An **Entra app registration** — single-page application platform, redirect URI set to the page's hosted URL
+3. **Admin consent** for the Chat API's delegated Graph permissions (Sites.Read.All, Mail.Read, People.Read.All, OnlineMeetingTranscript.Read.All, Chat.Read, ChannelMessage.Read.All, ExternalItem.Read.All)
+4. The HTML file **hosted over https** (a SharePoint site works) — the OAuth sign-in can't redirect back to a file opened from disk
+
+Then enter the Tenant ID and Client ID in Settings and click **Sign in to Microsoft 365**. Sign-in lasts about an hour; the app prompts when it needs a refresh.
+
+## Other settings
+
+- **Coaching model** (GitHub provider) — `gpt-4o` (default), `gpt-4o-mini` (faster), or `o1-mini` (deeper reasoning)
+- **Coaching interval** — how often recent transcript is sent for a tip (15s / 30s / 60s)
 - **Recent meetings** — the last 5 meetings are kept locally for reference; clearable at any time
-
-## Capturing remote participants (browser-based meetings)
-
-For meetings joined in a browser tab (Teams web, Zoom web, Google Meet), switch the source dropdown in the header from **Mic only** to **Mic + meeting tab** before clicking Start. The browser's share picker opens — choose the **tab** running the meeting and tick **"Also share tab audio"**. From then on:
-
-- Your own voice (mic) is transcribed and labeled **You**
-- Remote participants (tab audio) are transcribed and labeled **Remote A/B/C/D**, with speaker turns guessed from pauses
-- The meeting stays audible; clicking the browser's "Stop sharing" bar drops back to mic-only without interrupting the session
-
-Tab-audio transcription uses the Web Speech API's `MediaStreamTrack` input, which requires a current version of Chrome or Edge. Sharing a window or entire screen won't work — tab audio capture is tab-only.
 
 ## Limitations
 
 - Live transcription requires Chrome or Edge (Firefox and Safari don't implement `SpeechRecognition`)
 - Speaker labels are heuristic (based on pause length between turns), not true diarization
-- Tab capture works only for meetings running in a browser tab — the desktop Teams/Zoom apps can't be captured this way (join via the web client instead, or use speaker audio with Mic only mode)
+- **Mic + computer audio** requires Windows — macOS Chrome can capture tab audio but not system audio
+- The Microsoft 365 Copilot Chat API is in Preview and may change; the GitHub provider is the stable path
 - No cross-device sync — meeting history lives in that browser's local storage only
 
 ## Development
