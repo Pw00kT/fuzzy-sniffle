@@ -49,6 +49,9 @@ Uses Microsoft's Copilot Chat API (currently **Preview**) through Microsoft Grap
 
 Then enter the Tenant ID and Client ID in Settings and click **Sign in to Microsoft 365**. Sign-in lasts about an hour; the app prompts when it needs a refresh.
 
+### Claude (Anthropic)
+Paste an API key from [console.anthropic.com](https://console.anthropic.com/settings/keys) and pick a model — Haiku (fast, the default, well-suited to short frequent coaching turns), Sonnet, or Opus. Like the GitHub option it works even when the file is opened straight from disk; the key is stored only in this browser's `localStorage` and sent only to Anthropic's API (using Anthropic's direct-browser-access support for bring-your-own-key apps).
+
 ## Other settings
 
 - **Coaching model** (GitHub provider) — `gpt-4o` (default), `gpt-4o-mini` (faster), or `o1-mini` (deeper reasoning)

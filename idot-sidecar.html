@@ -367,6 +367,7 @@
       <select id="providerSelect">
         <option value="github">GitHub Copilot</option>
         <option value="m365">Microsoft 365 Copilot</option>
+        <option value="anthropic">Claude (Anthropic)</option>
       </select>
       <div class="hint" id="providerHint"></div>
     </div>
@@ -401,6 +402,26 @@
       <div class="field">
         <button type="button" class="btn-ghost" id="m365SignInBtn">Sign in to Microsoft 365</button>
         <span class="hint" id="m365Status" style="display:inline-block;margin-left:8px"></span>
+      </div>
+    </div>
+
+    <div id="anthropicFields" style="display:none">
+      <div class="field">
+        <label>Anthropic API Key</label>
+        <input type="password" id="anthropicKey" placeholder="sk-ant-...">
+        <div class="hint">
+          Create a key at <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>.
+          Stored only in this browser's local storage; sent only to Anthropic's API.
+          Works even when this file is opened directly from disk.
+        </div>
+      </div>
+      <div class="field">
+        <label>Claude model</label>
+        <select id="anthropicModel">
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fast, default)</option>
+          <option value="claude-sonnet-5">Claude Sonnet 5 (balanced)</option>
+          <option value="claude-opus-4-8">Claude Opus 4.8 (highest quality)</option>
+        </select>
       </div>
     </div>
 
@@ -450,6 +471,8 @@
     m365Tenant: 'idot_m365_tenant',
     m365Client: 'idot_m365_client',
     m365Pkce: 'idot_m365_pkce',
+    anthropicKey: 'idot_anthropic_key',
+    anthropicModel: 'idot_anthropic_model',
   };
 
   // Microsoft 365 Copilot needs an https origin for its OAuth redirect —
@@ -460,8 +483,11 @@
     const provider = document.getElementById('providerSelect').value;
     document.getElementById('githubFields').style.display = provider === 'github' ? '' : 'none';
     document.getElementById('m365Fields').style.display = provider === 'm365' ? '' : 'none';
+    document.getElementById('anthropicFields').style.display = provider === 'anthropic' ? '' : 'none';
+    // The "Coaching model" select holds GPT names — only meaningful for GitHub
+    document.getElementById('modelSelect').closest('.field').style.display = provider === 'github' ? '' : 'none';
     document.getElementById('providerHint').textContent = M365_AVAILABLE ? '' :
-      'Microsoft 365 Copilot requires this file to be hosted over https (e.g. on SharePoint) — ask IT. GitHub Copilot works from anywhere.';
+      'Microsoft 365 Copilot requires this file to be hosted over https (e.g. on SharePoint) — ask IT. GitHub Copilot and Claude work from anywhere.';
   }
 
   function loadSettings() {
@@ -471,6 +497,8 @@
     document.getElementById('providerSelect').value = getProvider();
     document.getElementById('m365Tenant').value = localStorage.getItem(LS.m365Tenant) || '';
     document.getElementById('m365Client').value = localStorage.getItem(LS.m365Client) || '';
+    document.getElementById('anthropicKey').value = localStorage.getItem(LS.anthropicKey) || '';
+    document.getElementById('anthropicModel').value = localStorage.getItem(LS.anthropicModel) || 'claude-haiku-4-5-20251001';
     if (!M365_AVAILABLE) {
       document.querySelector('#providerSelect option[value="m365"]').disabled = true;
     }
@@ -728,8 +756,9 @@
     if (!recentText.trim()) return;
 
     try {
-      const text = getProvider() === 'm365'
-        ? await m365GetInsight(recentText)
+      const provider = getProvider();
+      const text = provider === 'm365' ? await m365GetInsight(recentText)
+        : provider === 'anthropic' ? await anthropicGetInsight(recentText)
         : await githubGetInsight(recentText);
       if (text && text !== 'NO_COACHING_NEEDED') {
         addInsight(text);
@@ -770,6 +799,37 @@
 
     const data = await res.json();
     return data.choices?.[0]?.message?.content?.trim() || null;
+  }
+
+  // ── Provider: Claude (Anthropic Messages API, direct from browser) ──
+  async function anthropicGetInsight(recentText) {
+    const key = localStorage.getItem(LS.anthropicKey) || '';
+    if (!key) return null; // silently skip if no key configured
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: localStorage.getItem(LS.anthropicModel) || 'claude-haiku-4-5-20251001',
+        max_tokens: 200,
+        system: IDOT_COACHING_SYSTEM,
+        messages: [{ role: 'user', content: `Recent meeting discussion:\n\n${recentText}` }],
+      }),
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) toast('Anthropic API key invalid.');
+      console.error('Anthropic request failed:', res.status, await res.text().catch(() => ''));
+      return null;
+    }
+
+    const data = await res.json();
+    return data.content?.[0]?.text?.trim() || null;
   }
 
   // ── Provider: Microsoft 365 Copilot (Graph Chat API, Preview) ──
@@ -1128,6 +1188,8 @@
     localStorage.setItem(LS.provider, document.getElementById('providerSelect').value);
     localStorage.setItem(LS.m365Tenant, document.getElementById('m365Tenant').value.trim());
     localStorage.setItem(LS.m365Client, document.getElementById('m365Client').value.trim());
+    localStorage.setItem(LS.anthropicKey, document.getElementById('anthropicKey').value.trim());
+    localStorage.setItem(LS.anthropicModel, document.getElementById('anthropicModel').value);
     closeSettings();
     toast('Settings saved.');
   }
@@ -1165,7 +1227,10 @@
   } else {
     loadSettings();
     renderHistory();
-    const configured = getProvider() === 'm365' ? !!m365Token() : !!getToken();
+    const provider = getProvider();
+    const configured = provider === 'm365' ? !!m365Token()
+      : provider === 'anthropic' ? !!localStorage.getItem(LS.anthropicKey)
+      : !!getToken();
     if (!configured) {
       setTimeout(() => toast('Tip: open Settings to configure your AI provider for live coaching.'), 800);
     }
