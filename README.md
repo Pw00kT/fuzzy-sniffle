@@ -35,11 +35,21 @@ Opened via the **Settings** button in the header:
 - **Coaching interval** — how often the app sends recent transcript to Copilot for a tip (15s / 30s / 60s)
 - **Recent meetings** — the last 5 meetings are kept locally for reference; clearable at any time
 
+## Capturing remote participants (browser-based meetings)
+
+For meetings joined in a browser tab (Teams web, Zoom web, Google Meet), switch the source dropdown in the header from **Mic only** to **Mic + meeting tab** before clicking Start. The browser's share picker opens — choose the **tab** running the meeting and tick **"Also share tab audio"**. From then on:
+
+- Your own voice (mic) is transcribed and labeled **You**
+- Remote participants (tab audio) are transcribed and labeled **Remote A/B/C/D**, with speaker turns guessed from pauses
+- The meeting stays audible; clicking the browser's "Stop sharing" bar drops back to mic-only without interrupting the session
+
+Tab-audio transcription uses the Web Speech API's `MediaStreamTrack` input, which requires a current version of Chrome or Edge. Sharing a window or entire screen won't work — tab audio capture is tab-only.
+
 ## Limitations
 
 - Live transcription requires Chrome or Edge (Firefox and Safari don't implement `SpeechRecognition`)
 - Speaker labels are heuristic (based on pause length between turns), not true diarization
-- Designed for microphone-captured audio — for meetings joined entirely through a headset or phone bridge where you can hear all participants, this works well; capturing a remote participant's audio directly from a video call tab is a possible future enhancement via `getDisplayMedia`
+- Tab capture works only for meetings running in a browser tab — the desktop Teams/Zoom apps can't be captured this way (join via the web client instead, or use speaker audio with Mic only mode)
 - No cross-device sync — meeting history lives in that browser's local storage only
 
 ## Development

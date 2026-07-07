@@ -72,6 +72,19 @@
   .btn-ghost { background: var(--panel-light); color: var(--text); }
   .btn-ghost:hover { background: var(--border); }
 
+  select.source-select {
+    background: var(--panel-light);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  select.source-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
   /* ─── Layout ─────────────────────────────────────────────── */
   main {
     flex: 1;
@@ -310,6 +323,10 @@
 <header>
   <h1><span class="dot" id="liveDot"></span> IDOT Sidecar</h1>
   <div class="actions">
+    <select class="source-select" id="sourceSelect" title="What to transcribe">
+      <option value="mic">Mic only</option>
+      <option value="mic+tab">Mic + meeting tab</option>
+    </select>
     <button class="btn-ghost" id="exportBtn">Export</button>
     <button class="btn-ghost" id="settingsBtn">Settings</button>
     <button class="btn-primary" id="startBtn">Start Listening</button>
@@ -429,21 +446,27 @@
 
   // ─── State ──────────────────────────────────────────────────────────
   let running = false;
-  let recognition = null;
+  let starting = false; // guards the async gap while the share picker is open
+  let micRecognizer = null;
+  let tabRecognizer = null;
+  let displayStream = null;
   let audioContext = null;
   let analyser = null;
   let micStream = null;
   let levelRAF = null;
-  let coachingTimer = null;
   let lastCoachedAt = 0;
   let meetingStartTime = null;
 
-  const segments = []; // { speaker, text, ts }
-  let currentSpeaker = 'Speaker A';
-  let lastFinalTime = 0;
-  const SPEAKER_NAMES = ['Speaker A', 'Speaker B', 'Speaker C', 'Speaker D'];
-  let speakerIdx = 0;
+  const segments = []; // { speaker, text, ts, source }
   const TURN_GAP_MS = 4000;
+  // The mic is always the coordinator ("You"). Tab audio rotates Remote A–D
+  // on pause gaps — heuristic turn detection, tracked separately per source.
+  const tabSpeakers = {
+    names: ['Remote A', 'Remote B', 'Remote C', 'Remote D'],
+    idx: 0,
+    lastFinalTime: 0,
+    hasSpoken: false,
+  };
 
   const IDOT_COACHING_SYSTEM = `You are a real-time coaching assistant for IDOT (Illinois Department of Transportation) utility coordination meetings. Based on the recent discussion, provide ONE brief, actionable coaching tip (2-3 sentences max) about IDOT-specific processes, utility coordination requirements, letting timelines, right-of-way issues, or common meeting pitfalls. Only respond if there is something genuinely useful to add. If nothing specific is needed right now, respond with exactly: NO_COACHING_NEEDED`;
 
@@ -452,84 +475,97 @@
     return window.SpeechRecognition || window.webkitSpeechRecognition;
   }
 
-  function startRecognition() {
+  // One recognizer per audio source. With no track, the browser uses the
+  // default microphone; with a track (captured tab audio), recognition runs
+  // on that stream instead — recognition.start(track), current Chrome/Edge.
+  function makeRecognizer(source, track) {
     const Ctor = getRecognitionCtor();
-    if (!Ctor) {
-      toast('Speech recognition is not supported in this browser. Use Chrome or Edge.');
-      return false;
-    }
-    recognition = new Ctor();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    const rec = new Ctor();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+    let active = false;
 
-    recognition.onresult = (event) => {
+    rec.onresult = (event) => {
       let interimText = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const text = result[0].transcript.trim();
         if (!text) continue;
         if (result.isFinal) {
-          appendFinalSegment(text);
+          appendFinalSegment(text, source);
         } else {
           interimText += text + ' ';
         }
       }
-      renderInterim(interimText.trim());
+      renderInterim(interimText.trim(), source);
     };
 
-    recognition.onerror = (e) => {
+    rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') return;
-      console.error('Speech recognition error:', e.error);
-      if (e.error === 'not-allowed') {
+      console.error(`Speech recognition error (${source}):`, e.error);
+      if (e.error === 'not-allowed' && source === 'mic') {
         toast('Microphone access denied. Check browser permissions.');
         stopListening();
       }
     };
 
-    recognition.onend = () => {
+    rec.onend = () => {
       // Browsers auto-stop after silence/timeouts — restart seamlessly while running
-      if (running) {
-        try { recognition.start(); } catch { /* already starting */ }
+      if (running && active) {
+        try { track ? rec.start(track) : rec.start(); } catch { /* already starting or track gone */ }
       }
     };
 
-    try {
-      recognition.start();
-      return true;
-    } catch (err) {
-      console.error(err);
-      return false;
-    }
+    return {
+      start() {
+        // May throw (e.g. track input unsupported) — caller handles fallback
+        track ? rec.start(track) : rec.start();
+        active = true;
+      },
+      stop() {
+        active = false;
+        try { rec.stop(); } catch {}
+      },
+    };
   }
 
-  function appendFinalSegment(text) {
+  function labelFor(source) {
+    if (source === 'mic') return 'You';
     const now = Date.now();
-    if (now - lastFinalTime >= TURN_GAP_MS && segments.length > 0) {
-      speakerIdx = (speakerIdx + 1) % SPEAKER_NAMES.length;
+    if (tabSpeakers.hasSpoken && now - tabSpeakers.lastFinalTime >= TURN_GAP_MS) {
+      tabSpeakers.idx = (tabSpeakers.idx + 1) % tabSpeakers.names.length;
     }
-    lastFinalTime = now;
-    currentSpeaker = SPEAKER_NAMES[speakerIdx];
+    tabSpeakers.lastFinalTime = now;
+    tabSpeakers.hasSpoken = true;
+    return tabSpeakers.names[tabSpeakers.idx];
+  }
 
-    segments.push({ speaker: currentSpeaker, text, ts: now });
+  function currentLabel(source) {
+    return source === 'mic' ? 'You' : tabSpeakers.names[tabSpeakers.idx];
+  }
+
+  function appendFinalSegment(text, source) {
+    segments.push({ speaker: labelFor(source), text, ts: Date.now(), source });
     renderTranscript();
     maybeScheduleCoaching();
   }
 
-  function renderInterim(text) {
+  function renderInterim(text, source) {
     const body = document.getElementById('transcriptBody');
-    let interimEl = document.getElementById('interimSegment');
+    const id = `interimSegment-${source}`;
+    let interimEl = document.getElementById(id);
     if (!text) {
       if (interimEl) interimEl.remove();
       return;
     }
     if (!interimEl) {
       interimEl = document.createElement('div');
-      interimEl.id = 'interimSegment';
+      interimEl.id = id;
       interimEl.className = 'segment interim';
       body.appendChild(interimEl);
     }
-    interimEl.innerHTML = `<div class="meta"><span class="speaker">${currentSpeaker}</span></div><div class="text">${escapeHtml(text)}</div>`;
+    interimEl.innerHTML = `<div class="meta"><span class="speaker">${currentLabel(source)}</span></div><div class="text">${escapeHtml(text)}</div>`;
     body.scrollTop = body.scrollHeight;
   }
 
@@ -568,6 +604,13 @@
       analyser.fftSize = 256;
       const source = audioContext.createMediaStreamSource(micStream);
       source.connect(analyser);
+
+      // Fold captured tab audio into the same level meter (analyser has no
+      // output connection, so this never affects what the user hears)
+      const tabTrack = displayStream && displayStream.getAudioTracks()[0];
+      if (tabTrack) {
+        audioContext.createMediaStreamSource(new MediaStream([tabTrack])).connect(analyser);
+      }
 
       const data = new Uint8Array(analyser.frequencyBinCount);
       const fill = document.getElementById('micLevelFill');
@@ -661,28 +704,99 @@
   }
 
   // ─── Start / Stop ───────────────────────────────────────────────────
-  function startListening() {
-    if (running) return;
-    const ok = startRecognition();
-    if (!ok) return;
+  function cleanupDisplayStream() {
+    if (displayStream) {
+      displayStream.getTracks().forEach(t => t.stop());
+      displayStream = null;
+    }
+  }
+
+  async function captureTabAudio() {
+    // Returns the tab's audio track, or null (with a toast) on any failure.
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true, // required for the share picker; stopped immediately below
+        audio: { suppressLocalAudioPlayback: false }, // keep the meeting audible
+      });
+    } catch {
+      toast('Tab capture cancelled — continuing mic-only.');
+      return null;
+    }
+    stream.getVideoTracks().forEach(t => t.stop());
+    const track = stream.getAudioTracks()[0];
+    if (!track) {
+      stream.getTracks().forEach(t => t.stop());
+      toast("No tab audio shared — pick a Chrome tab and tick 'Also share tab audio'. Continuing mic-only.");
+      return null;
+    }
+    displayStream = stream;
+    return track;
+  }
+
+  async function startListening() {
+    if (running || starting) return;
+    if (!getRecognitionCtor()) {
+      toast('Speech recognition is not supported in this browser. Use Chrome or Edge.');
+      return;
+    }
+
+    starting = true;
+    const wantTab = document.getElementById('sourceSelect').value === 'mic+tab';
+    const tabTrack = wantTab ? await captureTabAudio() : null;
+    starting = false;
 
     running = true;
+    micRecognizer = makeRecognizer('mic', null);
+    try {
+      micRecognizer.start();
+    } catch (err) {
+      console.error(err);
+      running = false;
+      micRecognizer = null;
+      cleanupDisplayStream();
+      return;
+    }
+
+    if (tabTrack) {
+      tabRecognizer = makeRecognizer('tab', tabTrack);
+      try {
+        tabRecognizer.start();
+        tabTrack.onended = () => {
+          // User clicked the browser's "Stop sharing" bar mid-meeting
+          if (tabRecognizer) { tabRecognizer.stop(); tabRecognizer = null; }
+          renderInterim('', 'tab');
+          document.getElementById('statusLine').textContent = 'Listening — mic only';
+          toast('Tab sharing ended — continuing mic-only.');
+        };
+      } catch (err) {
+        console.error('Tab-audio recognition unsupported:', err);
+        tabRecognizer = null;
+        cleanupDisplayStream();
+        toast('This browser cannot transcribe tab audio — update Chrome/Edge. Continuing mic-only.');
+      }
+    }
+
     meetingStartTime = Date.now();
     lastCoachedAt = 0;
     document.getElementById('liveDot').classList.add('live');
     document.getElementById('startBtn').textContent = 'Stop Listening';
     document.getElementById('startBtn').classList.remove('btn-primary');
     document.getElementById('startBtn').classList.add('btn-danger');
-    document.getElementById('statusLine').textContent = 'Listening…';
+    document.getElementById('sourceSelect').disabled = true;
+    document.getElementById('statusLine').textContent =
+      tabRecognizer ? 'Listening — mic + tab audio' : 'Listening — mic only';
     startLevelMeter();
   }
 
   function stopListening() {
     running = false;
-    if (recognition) {
-      try { recognition.stop(); } catch {}
-      recognition = null;
-    }
+    if (micRecognizer) { micRecognizer.stop(); micRecognizer = null; }
+    if (tabRecognizer) { tabRecognizer.stop(); tabRecognizer = null; }
+    renderInterim('', 'mic');
+    renderInterim('', 'tab');
+    cleanupDisplayStream();
+    document.getElementById('sourceSelect').disabled = false;
     stopLevelMeter();
     document.getElementById('liveDot').classList.remove('live');
     document.getElementById('startBtn').textContent = 'Start Listening';
