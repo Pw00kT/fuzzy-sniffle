@@ -442,8 +442,10 @@
         <input type="password" id="aioKey" placeholder="leave blank if the server needs none">
       </div>
       <div class="field">
-        <label>Model name</label>
-        <input type="text" id="aioModel" placeholder="llama3.1:8b">
+        <label>Model name (optional)</label>
+        <input type="text" id="aioModel" list="aioModels" placeholder="leave blank for the server's default">
+        <datalist id="aioModels"></datalist>
+        <div class="hint">Autocompletes from the server's <code>/v1/models</code> list when the server is reachable.</div>
       </div>
     </div>
 
@@ -847,17 +849,19 @@
 
     let res;
     try {
+      const payload = {
+        max_tokens: 200,
+        messages: [
+          { role: 'system', content: IDOT_COACHING_SYSTEM },
+          { role: 'user', content: `Recent meeting discussion:\n\n${recentText}` },
+        ],
+      };
+      const model = localStorage.getItem(LS.aioModel) || '';
+      if (model) payload.model = model; // omitted → the server's default model
       res = await fetch(`${base}/v1/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          model: localStorage.getItem(LS.aioModel) || '',
-          max_tokens: 200,
-          messages: [
-            { role: 'system', content: IDOT_COACHING_SYSTEM },
-            { role: 'user', content: `Recent meeting discussion:\n\n${recentText}` },
-          ],
-        }),
+        body: JSON.stringify(payload),
       });
     } catch (err) {
       if (!aioWarned) {
@@ -877,6 +881,28 @@
     aioWarned = false; // server reachable again
     const data = await res.json();
     return data.choices?.[0]?.message?.content?.trim() || null;
+  }
+
+  // Populate the model-name autocomplete from the server's /v1/models list,
+  // so a coordinator never has to know model names — just the Base URL.
+  let aioModelsFetchedFor = '';
+  async function refreshAioModels() {
+    const base = (document.getElementById('aioBaseUrl').value.trim() ||
+      localStorage.getItem(LS.aioBaseUrl) || '').replace(/\/+$/, '');
+    if (!base || base === aioModelsFetchedFor) return;
+
+    const key = document.getElementById('aioKey').value.trim() || localStorage.getItem(LS.aioKey) || '';
+    try {
+      const res = await fetch(`${base}/v1/models`, {
+        headers: key ? { 'Authorization': `Bearer ${key}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const ids = (data.data || []).map(m => m.id).filter(Boolean);
+      document.getElementById('aioModels').innerHTML =
+        ids.map(id => `<option value="${escapeHtml(id)}">`).join('');
+      aioModelsFetchedFor = base;
+    } catch { /* server unreachable — leave the list empty */ }
   }
 
   // ── Provider: Claude (Anthropic Messages API, direct from browser) ──
@@ -1255,6 +1281,7 @@
     loadSettings();
     renderHistory();
     document.getElementById('settingsModal').classList.add('open');
+    if (document.getElementById('providerSelect').value === 'aio') refreshAioModels();
   }
   function closeSettings() {
     document.getElementById('settingsModal').classList.remove('open');
@@ -1282,8 +1309,12 @@
   document.getElementById('exportBtn').addEventListener('click', exportMeeting);
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
-  document.getElementById('providerSelect').addEventListener('change', applyProviderVisibility);
+  document.getElementById('providerSelect').addEventListener('change', () => {
+    applyProviderVisibility();
+    if (document.getElementById('providerSelect').value === 'aio') refreshAioModels();
+  });
   document.getElementById('m365SignInBtn').addEventListener('click', m365SignIn);
+  document.getElementById('aioBaseUrl').addEventListener('change', refreshAioModels);
   document.getElementById('settingsModal').addEventListener('click', (e) => {
     if (e.target.id === 'settingsModal') closeSettings();
   });
