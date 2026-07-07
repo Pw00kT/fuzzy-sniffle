@@ -52,6 +52,13 @@ Then enter the Tenant ID and Client ID in Settings and click **Sign in to Micros
 ### Claude (Anthropic)
 Paste an API key from [console.anthropic.com](https://console.anthropic.com/settings/keys) and pick a model — Haiku (fast, the default, well-suited to short frequent coaching turns), Sonnet, or Opus. Like the GitHub option it works even when the file is opened straight from disk; the key is stored only in this browser's `localStorage` and sent only to Anthropic's API (using Anthropic's direct-browser-access support for bring-your-own-key apps).
 
+### Self-hosted / Open source (AIO)
+Point the app at your own AI server — [AIO Orchestrator](https://github.com/Pw00kT/aio-orchestrator) or any other OpenAI-compatible server (Ollama, LiteLLM, vLLM, LM Studio). Enter the server's **Base URL** (the app calls `{base}/v1/chat/completions`), an API key only if your server requires one, and the model name. This is the maximum-sovereignty option: **transcript text never leaves your own infrastructure**.
+
+Two networking notes:
+- **CORS** — the page calls the server directly from the browser, so the server must allow this page's origin (Ollama: set `OLLAMA_ORIGINS`; LiteLLM/vLLM have CORS flags; most gateways have an equivalent setting).
+- **Mixed content** — browsers treat `http://localhost` as secure, so a local server works even when this page is served over https (e.g. from SharePoint). A *remote* plain-`http://` server will be blocked by the browser — serve it over https or run it locally.
+
 ## Other settings
 
 - **Coaching model** (GitHub provider) — `gpt-4o` (default), `gpt-4o-mini` (faster), or `o1-mini` (deeper reasoning)

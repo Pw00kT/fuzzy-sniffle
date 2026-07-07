@@ -368,6 +368,7 @@
         <option value="github">GitHub Copilot</option>
         <option value="m365">Microsoft 365 Copilot</option>
         <option value="anthropic">Claude (Anthropic)</option>
+        <option value="aio">Self-hosted / Open source (AIO)</option>
       </select>
       <div class="hint" id="providerHint"></div>
     </div>
@@ -425,6 +426,27 @@
       </div>
     </div>
 
+    <div id="aioFields" style="display:none">
+      <div class="field">
+        <label>Server Base URL</label>
+        <input type="text" id="aioBaseUrl" placeholder="http://localhost:8000">
+        <div class="hint">
+          Root URL of any OpenAI-compatible server — AIO Orchestrator, Ollama,
+          LiteLLM, vLLM, LM Studio. The app calls <code>{base}/v1/chat/completions</code>
+          directly from this browser, so the server must allow CORS from this page's origin.
+          Transcript text never leaves your own infrastructure.
+        </div>
+      </div>
+      <div class="field">
+        <label>API Key (optional)</label>
+        <input type="password" id="aioKey" placeholder="leave blank if the server needs none">
+      </div>
+      <div class="field">
+        <label>Model name</label>
+        <input type="text" id="aioModel" placeholder="llama3.1:8b">
+      </div>
+    </div>
+
     <div class="field">
       <label>Coaching model</label>
       <select id="modelSelect">
@@ -473,6 +495,9 @@
     m365Pkce: 'idot_m365_pkce',
     anthropicKey: 'idot_anthropic_key',
     anthropicModel: 'idot_anthropic_model',
+    aioBaseUrl: 'idot_aio_base',
+    aioKey: 'idot_aio_key',
+    aioModel: 'idot_aio_model',
   };
 
   // Microsoft 365 Copilot needs an https origin for its OAuth redirect —
@@ -484,6 +509,7 @@
     document.getElementById('githubFields').style.display = provider === 'github' ? '' : 'none';
     document.getElementById('m365Fields').style.display = provider === 'm365' ? '' : 'none';
     document.getElementById('anthropicFields').style.display = provider === 'anthropic' ? '' : 'none';
+    document.getElementById('aioFields').style.display = provider === 'aio' ? '' : 'none';
     // The "Coaching model" select holds GPT names — only meaningful for GitHub
     document.getElementById('modelSelect').closest('.field').style.display = provider === 'github' ? '' : 'none';
     document.getElementById('providerHint').textContent = M365_AVAILABLE ? '' :
@@ -499,6 +525,9 @@
     document.getElementById('m365Client').value = localStorage.getItem(LS.m365Client) || '';
     document.getElementById('anthropicKey').value = localStorage.getItem(LS.anthropicKey) || '';
     document.getElementById('anthropicModel').value = localStorage.getItem(LS.anthropicModel) || 'claude-haiku-4-5-20251001';
+    document.getElementById('aioBaseUrl').value = localStorage.getItem(LS.aioBaseUrl) || '';
+    document.getElementById('aioKey').value = localStorage.getItem(LS.aioKey) || '';
+    document.getElementById('aioModel').value = localStorage.getItem(LS.aioModel) || '';
     if (!M365_AVAILABLE) {
       document.querySelector('#providerSelect option[value="m365"]').disabled = true;
     }
@@ -759,6 +788,7 @@
       const provider = getProvider();
       const text = provider === 'm365' ? await m365GetInsight(recentText)
         : provider === 'anthropic' ? await anthropicGetInsight(recentText)
+        : provider === 'aio' ? await aioGetInsight(recentText)
         : await githubGetInsight(recentText);
       if (text && text !== 'NO_COACHING_NEEDED') {
         addInsight(text);
@@ -797,6 +827,54 @@
       return null;
     }
 
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  }
+
+  // ── Provider: self-hosted / open-source, OpenAI-compatible ──
+  // Works with AIO Orchestrator, Ollama, LiteLLM, vLLM, LM Studio — anything
+  // speaking POST {base}/v1/chat/completions. Transcript text stays on the
+  // org's own infrastructure.
+  let aioWarned = false;
+
+  async function aioGetInsight(recentText) {
+    const base = (localStorage.getItem(LS.aioBaseUrl) || '').replace(/\/+$/, '');
+    if (!base) return null; // silently skip if no server configured
+
+    const key = localStorage.getItem(LS.aioKey) || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (key) headers['Authorization'] = `Bearer ${key}`;
+
+    let res;
+    try {
+      res = await fetch(`${base}/v1/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: localStorage.getItem(LS.aioModel) || '',
+          max_tokens: 200,
+          messages: [
+            { role: 'system', content: IDOT_COACHING_SYSTEM },
+            { role: 'user', content: `Recent meeting discussion:\n\n${recentText}` },
+          ],
+        }),
+      });
+    } catch (err) {
+      if (!aioWarned) {
+        aioWarned = true;
+        toast("Can't reach the self-hosted AI server — check the Base URL, that it's running, and that CORS is enabled.");
+      }
+      console.error('Self-hosted AI request error:', err);
+      return null;
+    }
+
+    if (!res.ok) {
+      if (res.status === 401) toast('Self-hosted AI server rejected the API key.');
+      console.error('Self-hosted AI request failed:', res.status, await res.text().catch(() => ''));
+      return null;
+    }
+
+    aioWarned = false; // server reachable again
     const data = await res.json();
     return data.choices?.[0]?.message?.content?.trim() || null;
   }
@@ -1190,6 +1268,9 @@
     localStorage.setItem(LS.m365Client, document.getElementById('m365Client').value.trim());
     localStorage.setItem(LS.anthropicKey, document.getElementById('anthropicKey').value.trim());
     localStorage.setItem(LS.anthropicModel, document.getElementById('anthropicModel').value);
+    localStorage.setItem(LS.aioBaseUrl, document.getElementById('aioBaseUrl').value.trim().replace(/\/+$/, ''));
+    localStorage.setItem(LS.aioKey, document.getElementById('aioKey').value.trim());
+    localStorage.setItem(LS.aioModel, document.getElementById('aioModel').value.trim());
     closeSettings();
     toast('Settings saved.');
   }
@@ -1219,6 +1300,10 @@
     }
   });
 
+  // Diagnostics hook — lets automated tests and console debugging drive the
+  // transcript/coaching pipeline without a live microphone. Harmless in use.
+  window.__idotTest = { appendFinalSegment, requestCoaching, segments };
+
   // ─── Init ───────────────────────────────────────────────────────────
   if (window.opener && new URLSearchParams(location.search).get('code')) {
     // This page is running as the OAuth redirect target inside the sign-in
@@ -1230,6 +1315,7 @@
     const provider = getProvider();
     const configured = provider === 'm365' ? !!m365Token()
       : provider === 'anthropic' ? !!localStorage.getItem(LS.anthropicKey)
+      : provider === 'aio' ? !!localStorage.getItem(LS.aioBaseUrl)
       : !!getToken();
     if (!configured) {
       setTimeout(() => toast('Tip: open Settings to configure your AI provider for live coaching.'), 800);
