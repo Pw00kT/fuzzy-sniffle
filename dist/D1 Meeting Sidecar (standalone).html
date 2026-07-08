@@ -1,0 +1,1846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IDOT Sidecar, Live Meeting Assistant</title>
+<style>
+  /* ═══ Design tokens ═════════════════════════════════════════
+     Layered navy surfaces, IDOT-inspired blue, safety-orange for
+     live states. Same custom-property names as v1 so nothing else
+     needs to know the palette changed. */
+  /* Anchored to the IDOT Design System tokens (Pantone-anchored brand):
+     Navy #002341 (541 C), Orange #F58220 (144 C), supporting Cyan/Yellow/
+     Green/Red-Orange, ink scale for dark surfaces. No invented hues. */
+  :root {
+    --bg: #000913;            /* ink-950 */
+    --panel: #00121f;         /* ink-900 */
+    --panel-light: #001a30;   /* ink-800 */
+    --border: #0d3050;        /* ink-600 */
+    --border-strong: #1a3d5c; /* ink-500 */
+    --text: #e6ecf3;          /* ink-50 */
+    --text-dim: #9bb1cc;      /* ink-200 */
+    --accent: #00AEEF;        /* IDOT Cyan, Process Cyan C */
+    --accent-dim: #3a6593;    /* ink-400 */
+    --accent-soft: rgba(0, 174, 239, 0.11);
+    --green: #97C93D;         /* IDOT Green, 2292 C */
+    --amber: #FCB116;         /* IDOT Yellow, 124 C */
+    --orange: #F58220;        /* IDOT Orange, 144 C */
+    --red: #F05623;           /* IDOT Red-Orange, 7579 C */
+    --radius-s: 7px;
+    --radius-m: 10px;
+    --radius-l: 14px;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.45);
+    --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { color-scheme: dark; }
+  body {
+    font-family: var(--font);
+    background:
+      radial-gradient(1100px 500px at 85% -10%, rgba(0, 174, 239, 0.05), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(0, 174, 239, 0.3); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  /* ═══ Header / brand ════════════════════════════════════════ */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 20px;
+    background: linear-gradient(180deg, rgba(24, 36, 57, 0.6), rgba(16, 26, 44, 0.9));
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-1);
+    flex-shrink: 0;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .brand-mark {
+    width: 34px; height: 34px; flex-shrink: 0;
+    display: grid; place-items: center;
+    border-radius: 9px;
+    background: linear-gradient(145deg, #002341, #001a30);
+    border: 1px solid var(--border-strong);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), var(--shadow-1);
+  }
+  .brand-mark svg { display: block; }
+  header h1 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1.15;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .brand-sub {
+    display: block;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  header h1 .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  header h1 .dot.live {
+    background: var(--orange);
+    box-shadow: 0 0 0 0 rgba(245, 130, 32, 0.55);
+    animation: livePulse 1.6s infinite;
+  }
+  @keyframes livePulse {
+    0% { box-shadow: 0 0 0 0 rgba(245, 130, 32, 0.55); }
+    70% { box-shadow: 0 0 0 8px rgba(245, 130, 32, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 130, 32, 0); }
+  }
+  header .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+  /* ═══ Buttons & controls ════════════════════════════════════ */
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 1px solid transparent;
+    border-radius: var(--radius-s);
+    padding: 7px 13px;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background 0.15s, border-color 0.15s, transform 0.06s, box-shadow 0.15s;
+  }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  .btn-primary {
+    background: linear-gradient(180deg, #3a6593, #1a3d5c);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+  .btn-primary:hover { background: linear-gradient(180deg, #6a8bb3, #3a6593); }
+  .btn-danger {
+    background: var(--red);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+  .btn-danger:hover { filter: brightness(1.08); }
+  .btn-ghost {
+    background: var(--panel-light);
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .btn-ghost:hover { background: var(--border); border-color: var(--border-strong); }
+
+  select.source-select {
+    background: var(--panel-light);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  select.source-select:hover { border-color: var(--border-strong); }
+  select.source-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ═══ Layout ════════════════════════════════════════════════ */
+  main { flex: 1; display: flex; overflow: hidden; }
+  .col-left {
+    width: 340px;
+    min-width: 340px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .col-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+  /* ═══ Left panel: controls + insights ═══════════════════════ */
+  .control-block {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    background: linear-gradient(180deg, rgba(79, 142, 247, 0.045), transparent);
+  }
+  .mic-level {
+    height: 7px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .mic-level-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--green), var(--amber) 85%, var(--orange));
+    border-radius: 999px;
+    transition: width 0.1s;
+  }
+  .status-line {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .disclaimer {
+    font-size: 10.5px;
+    line-height: 1.55;
+    color: var(--text-dim);
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border);
+  }
+  .btn-small { padding: 3px 9px; font-size: 10px; letter-spacing: 0.05em; border-radius: 6px; text-transform: none; }
+
+  .insights-header {
+    padding: 14px 16px 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .insights-header .line { flex: 1; height: 1px; background: var(--border); }
+  .insights-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 2px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .insight-card {
+    background: linear-gradient(180deg, var(--panel-light), rgba(24, 36, 57, 0.6));
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-m);
+    padding: 10px 12px 11px 34px;
+    font-size: 13px;
+    line-height: 1.55;
+    animation: slideIn 0.25s ease-out;
+    position: relative;
+    box-shadow: var(--shadow-1);
+  }
+  .insight-card::before {
+    content: "";
+    position: absolute;
+    left: 11px; top: 12px;
+    width: 14px; height: 14px;
+    background: var(--accent);
+    -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V18h6v-1.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2zM9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-1z"/></svg>') center / contain no-repeat;
+            mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V18h6v-1.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2zM9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-1z"/></svg>') center / contain no-repeat;
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .insight-card .time {
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    display: block;
+    letter-spacing: 0.04em;
+  }
+  .insight-card .dismiss {
+    position: absolute;
+    top: 5px; right: 5px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 3px 7px;
+    line-height: 1;
+    border-radius: 5px;
+    opacity: 0.6;
+  }
+  .insight-card .dismiss:hover { opacity: 1; background: rgba(255, 255, 255, 0.07); color: var(--text); }
+  .insight-empty {
+    color: var(--text-dim);
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 22px 12px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-m);
+    margin-top: 4px;
+  }
+
+  /* ═══ Right panel: transcript ═══════════════════════════════ */
+  .transcript-header {
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .transcript-header input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 15.5px;
+    font-weight: 650;
+    letter-spacing: 0.005em;
+    width: 60%;
+    padding-bottom: 2px;
+    transition: border-color 0.15s;
+  }
+  .transcript-header input::placeholder { color: var(--text-dim); font-weight: 500; }
+  .transcript-header input:hover { border-bottom-color: var(--border-strong); }
+  .transcript-header input:focus { outline: none; border-bottom-color: var(--accent); }
+  .transcript-header #wordCount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .transcript-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .segment { max-width: 74ch; }
+  .segment .meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .segment .speaker {
+    font-weight: 700;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid rgba(0, 174, 239, 0.3);
+    padding: 1px 8px 2px;
+    border-radius: 999px;
+  }
+  .segment .speaker.remote {
+    color: var(--green);
+    background: rgba(151, 201, 61, 0.1);
+    border-color: rgba(151, 201, 61, 0.3);
+  }
+  .segment .text { font-size: 14px; line-height: 1.65; color: var(--text); }
+  .segment.interim { opacity: 0.75; }
+  .segment.interim .text { color: var(--text-dim); font-style: italic; }
+  .transcript-empty {
+    color: var(--text-dim);
+    text-align: center;
+    margin: 70px auto 0;
+    font-size: 13.5px;
+    line-height: 1.8;
+    max-width: 360px;
+  }
+
+  /* ═══ Settings modal ════════════════════════════════════════ */
+  .modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(4, 8, 16, 0.66);
+    backdrop-filter: blur(3px);
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-l);
+    padding: 22px 24px;
+    width: 460px;
+    max-width: 92vw;
+    max-height: 86vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-2);
+    animation: modalIn 0.18s ease-out;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+  .modal h2 {
+    font-size: 15px;
+    letter-spacing: 0.01em;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .field { margin-bottom: 15px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .field input, .field select {
+    width: 100%;
+    padding: 9px 11px;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field input::placeholder { color: #5c6c85; }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0, 174, 239, 0.15);
+  }
+  .field .hint { font-size: 11px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
+  .field .hint a { color: var(--accent); text-decoration: none; }
+  .field .hint a:hover { text-decoration: underline; }
+  .field .hint code {
+    font-size: 10.5px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5px 4px;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ═══ History ═══════════════════════════════════════════════ */
+  .history-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    background: rgba(0, 0, 0, 0.18);
+  }
+  .history-item {
+    padding: 8px 11px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    transition: background 0.12s;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-item:hover { background: var(--panel-light); }
+  .history-item .date { color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ═══ Chrome ════════════════════════════════════════════════ */
+  ::-webkit-scrollbar { width: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); border: 2px solid transparent; background-clip: content-box; }
+
+  .toast {
+    position: fixed;
+    bottom: 22px; left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    background: var(--panel-light);
+    border: 1px solid var(--border-strong);
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 500;
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    box-shadow: var(--shadow-2);
+    max-width: min(560px, 90vw);
+    text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  /* ═══ Print: a clean transcript handout ═════════════════════ */
+  @media print {
+    body { height: auto; overflow: visible; background: #fff; color: #111; display: block; }
+    header .actions, .col-left, .modal-backdrop, .toast, header h1 .dot { display: none !important; }
+    header { background: none; border-bottom: 2px solid #111; box-shadow: none; }
+    header h1, .brand-sub { color: #111; }
+    .brand-mark { background: #1d4ed8; }
+    main { display: block; overflow: visible; }
+    .col-right { overflow: visible; }
+    .transcript-header { border-color: #ccc; }
+    .transcript-header input { color: #111; }
+    .transcript-header #wordCount { color: #555; }
+    .transcript-body { overflow: visible; padding: 16px 0; }
+    .segment .text { color: #111; }
+    .segment .meta { color: #555; }
+    .segment .speaker { color: #002341; background: none; border-color: #9bb1cc; }
+    .segment .speaker.remote { color: #002341; border-color: #97C93D; }
+    .segment.interim { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M7.5 21 L10.5 3" stroke="#F58220" stroke-width="2" stroke-linecap="round"/>
+        <path d="M16.5 21 L13.5 3" stroke="#F58220" stroke-width="2" stroke-linecap="round"/>
+        <path d="M12 4.5 v2.6 M12 11 v2.6 M12 17.5 v2.6" stroke="rgba(255,255,255,0.9)" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h1>
+      <span>
+        IDOT Sidecar
+        <span class="brand-sub">Utility Coordination · Live Assistant</span>
+      </span>
+      <span class="dot" id="liveDot"></span>
+    </h1>
+  </div>
+  <div class="actions">
+    <select class="source-select" id="sourceSelect" title="What to transcribe">
+      <option value="headset">Headset, just me</option>
+      <option value="room">Room / speakerphone</option>
+      <option value="tab">Mic + meeting tab</option>
+      <option value="screen">Mic + computer audio</option>
+    </select>
+    <button class="btn-ghost" id="exportBtn">Copy Notes</button>
+    <button class="btn-ghost" id="exportJsonBtn">Export JSON</button>
+    <button class="btn-ghost" id="exportBriefBtn">Follow-up brief</button>
+    <button class="btn-ghost" id="settingsBtn">Settings</button>
+    <button class="btn-primary" id="startBtn">Start Listening</button>
+  </div>
+</header>
+
+<main>
+  <div class="col-left">
+    <div class="control-block">
+      <div class="status-line" id="statusLine">Idle: click Start Listening</div>
+      <div class="mic-level"><div class="mic-level-fill" id="micLevelFill"></div></div>
+      <div class="disclaimer">Not official minutes. AI coaching is suggestion only. Evidence-based; draft, not a record of decision.</div>
+    </div>
+    <div class="insights-header"><span>Live Coaching</span><span class="line"></span><button class="btn-ghost btn-small" id="suggestTipBtn" type="button">Suggest a tip</button></div>
+    <div class="insights-list" id="insightsList">
+      <div class="insight-empty">Coaching tips appear here once the meeting is running and enough has been said. They are prompts for the coordinator, not determinations.</div>
+    </div>
+  </div>
+
+  <div class="col-right">
+    <div class="transcript-header">
+      <input id="meetingTitle" placeholder="Untitled meeting: click to name it" value="">
+      <span style="font-size:12px;color:var(--text-dim)" id="wordCount">0 words</span>
+    </div>
+    <div class="transcript-body" id="transcriptBody">
+      <div class="transcript-empty">
+        Live transcript will appear here.<br>
+        Click "Start Listening" to transcribe in the browser (Chrome or Edge), or load a
+        sample coordination meeting to see the full pipeline: transcript, coaching,
+        extraction and exports.<br><br>
+        <button class="btn-ghost" id="loadSampleBtn" type="button">Load sample meeting</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="settingsModal">
+  <div class="modal">
+    <h2>Settings</h2>
+
+    <div class="field">
+      <label>AI provider</label>
+      <select id="providerSelect">
+        <option value="builtin" hidden>Built-in assistant (no key, this workspace)</option>
+        <option value="github">GitHub Copilot</option>
+        <option value="m365">Microsoft 365 Copilot</option>
+        <option value="anthropic">Claude (Anthropic)</option>
+        <option value="aio">Self-hosted / Open source (AIO)</option>
+      </select>
+      <div class="hint" id="providerHint"></div>
+    </div>
+
+    <div id="githubFields">
+      <div class="field">
+        <label>GitHub Token (Copilot)</label>
+        <input type="password" id="ghToken" placeholder="ghp_...">
+        <div class="hint">
+          Personal Access Token for a GitHub account with Copilot enabled.
+          Create one at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>: no special scopes required.
+          Stored only in this browser's local storage; never sent anywhere but GitHub's API.
+        </div>
+      </div>
+    </div>
+
+    <div id="m365Fields" style="display:none">
+      <div class="field">
+        <label>Entra Tenant ID</label>
+        <input type="text" id="m365Tenant" placeholder="contoso.onmicrosoft.com or GUID">
+      </div>
+      <div class="field">
+        <label>App (Client) ID</label>
+        <input type="text" id="m365Client" placeholder="00000000-0000-0000-0000-000000000000">
+        <div class="hint">
+          From your IT department's one-time Entra app registration (single-page
+          application platform, redirect URI = this page's URL, delegated Copilot
+          Chat API permissions with admin consent). Requires a Microsoft 365
+          Copilot license on your account.
+        </div>
+      </div>
+      <div class="field">
+        <button type="button" class="btn-ghost" id="m365SignInBtn">Sign in to Microsoft 365</button>
+        <span class="hint" id="m365Status" style="display:inline-block;margin-left:8px"></span>
+      </div>
+    </div>
+
+    <div id="anthropicFields" style="display:none">
+      <div class="field">
+        <label>Anthropic API Key</label>
+        <input type="password" id="anthropicKey" placeholder="sk-ant-...">
+        <div class="hint">
+          Create a key at <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>.
+          Stored only in this browser's local storage; sent only to Anthropic's API.
+          Works even when this file is opened directly from disk.
+        </div>
+      </div>
+      <div class="field">
+        <label>Claude model</label>
+        <select id="anthropicModel">
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fast, default)</option>
+          <option value="claude-sonnet-5">Claude Sonnet 5 (balanced)</option>
+          <option value="claude-opus-4-8">Claude Opus 4.8 (highest quality)</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="aioFields" style="display:none">
+      <div class="field">
+        <label>Server Base URL</label>
+        <input type="text" id="aioBaseUrl" placeholder="http://localhost:8000  or  https://integrate.api.nvidia.com/v1">
+        <div class="hint">
+          Any OpenAI-compatible endpoint: NVIDIA NIM hosted
+          (<code>https://integrate.api.nvidia.com/v1</code> + free <code>nvapi-</code> key),
+          a self-hosted NIM container, Ollama, LiteLLM, vLLM, LM Studio. A trailing
+          <code>/v1</code> is handled either way. The server must allow CORS from this
+          page's origin. With a local server, transcript text never leaves your machine.
+        </div>
+      </div>
+      <div class="field">
+        <label>API Key (optional)</label>
+        <input type="password" id="aioKey" placeholder="leave blank if the server needs none">
+      </div>
+      <div class="field">
+        <label>Model name (optional)</label>
+        <input type="text" id="aioModel" list="aioModels" placeholder="leave blank for the server's default">
+        <datalist id="aioModels"></datalist>
+        <div class="hint">Autocompletes from the server's <code>/v1/models</code> list when the server is reachable.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Coaching model</label>
+      <select id="modelSelect">
+        <option value="gpt-4o">gpt-4o (default)</option>
+        <option value="gpt-4o-mini">gpt-4o-mini (faster/cheaper)</option>
+        <option value="o1-mini">o1-mini (deeper reasoning)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Coaching interval</label>
+      <select id="intervalSelect">
+        <option value="15000">Every 15 seconds</option>
+        <option value="30000" selected>Every 30 seconds</option>
+        <option value="60000">Every 60 seconds</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Recent meetings (stored locally on this device)</label>
+      <div class="history-list" id="historyList"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" id="clearHistoryBtn">Clear history</button>
+      <button class="btn-primary" id="saveSettingsBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ─── Storage helpers ────────────────────────────────────────────────
+  const LS = {
+    token: 'idot_gh_token',
+    model: 'idot_model',
+    interval: 'idot_interval',
+    history: 'idot_history',
+    provider: 'idot_ai_provider',
+    m365Tenant: 'idot_m365_tenant',
+    m365Client: 'idot_m365_client',
+    m365Pkce: 'idot_m365_pkce',
+    anthropicKey: 'idot_anthropic_key',
+    anthropicModel: 'idot_anthropic_model',
+    aioBaseUrl: 'idot_aio_base',
+    aioKey: 'idot_aio_key',
+    aioModel: 'idot_aio_model',
+  };
+
+  // Microsoft 365 Copilot needs an https origin for its OAuth redirect —
+  // impossible when the file is opened directly from disk.
+  const M365_AVAILABLE = location.protocol === 'https:';
+
+  // Built-in assistant: present when this page is hosted inside a workspace
+  // that injects window.claude (e.g. a claude.ai artifact). No key needed.
+  const builtinAvailable = () => !!(window.claude && typeof window.claude.complete === 'function');
+
+  function applyProviderVisibility() {
+    const provider = document.getElementById('providerSelect').value;
+    document.getElementById('githubFields').style.display = provider === 'github' ? '' : 'none';
+    document.getElementById('m365Fields').style.display = provider === 'm365' ? '' : 'none';
+    document.getElementById('anthropicFields').style.display = provider === 'anthropic' ? '' : 'none';
+    document.getElementById('aioFields').style.display = provider === 'aio' ? '' : 'none';
+    // The "Coaching model" select holds GPT names — only meaningful for GitHub
+    document.getElementById('modelSelect').closest('.field').style.display = provider === 'github' ? '' : 'none';
+    document.getElementById('providerHint').textContent = provider === 'builtin'
+      ? 'Uses the assistant built into this workspace. No key required.'
+      : M365_AVAILABLE ? '' :
+        'Microsoft 365 Copilot requires this file to be hosted over https (for example on SharePoint), ask IT. GitHub Copilot and Claude work from anywhere.';
+  }
+
+  function loadSettings() {
+    document.getElementById('ghToken').value = localStorage.getItem(LS.token) || '';
+    document.getElementById('modelSelect').value = localStorage.getItem(LS.model) || 'gpt-4o';
+    document.getElementById('intervalSelect').value = localStorage.getItem(LS.interval) || '30000';
+    document.getElementById('providerSelect').value = getProvider();
+    document.getElementById('m365Tenant').value = localStorage.getItem(LS.m365Tenant) || '';
+    document.getElementById('m365Client').value = localStorage.getItem(LS.m365Client) || '';
+    document.getElementById('anthropicKey').value = localStorage.getItem(LS.anthropicKey) || '';
+    document.getElementById('anthropicModel').value = localStorage.getItem(LS.anthropicModel) || 'claude-haiku-4-5-20251001';
+    document.getElementById('aioBaseUrl').value = localStorage.getItem(LS.aioBaseUrl) || '';
+    document.getElementById('aioKey').value = localStorage.getItem(LS.aioKey) || '';
+    document.getElementById('aioModel').value = localStorage.getItem(LS.aioModel) || '';
+    if (!M365_AVAILABLE) {
+      document.querySelector('#providerSelect option[value="m365"]').disabled = true;
+    }
+    if (builtinAvailable()) {
+      document.querySelector('#providerSelect option[value="builtin"]').hidden = false;
+    }
+    applyProviderVisibility();
+    updateM365Status();
+  }
+
+  function getToken() { return localStorage.getItem(LS.token) || ''; }
+  function getModel() { return localStorage.getItem(LS.model) || 'gpt-4o'; }
+  function getInterval() { return parseInt(localStorage.getItem(LS.interval) || '30000', 10); }
+  function getProvider() {
+    const p = localStorage.getItem(LS.provider) || (builtinAvailable() ? 'builtin' : 'github');
+    if (p === 'm365' && !M365_AVAILABLE) return 'github';
+    if (p === 'builtin' && !builtinAvailable()) return 'github';
+    return p;
+  }
+
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem(LS.history) || '[]'); }
+    catch { return []; }
+  }
+  function saveMeetingToHistory(meeting) {
+    const hist = getHistory();
+    hist.unshift(meeting);
+    localStorage.setItem(LS.history, JSON.stringify(hist.slice(0, 5)));
+  }
+
+  // ─── Toast ──────────────────────────────────────────────────────────
+  let toastTimer = null;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  }
+
+  // ─── State ──────────────────────────────────────────────────────────
+  let running = false;
+  let starting = false; // guards the async gap while the share picker is open
+  let micRecognizer = null;
+  let tabRecognizer = null;
+  let displayStream = null;
+  let audioContext = null;
+  let analyser = null;
+  let micStream = null;
+  let levelRAF = null;
+  let lastCoachedAt = 0;
+  let meetingStartTime = null;
+
+  const segments = []; // { speaker, text, ts, source }
+  const TURN_GAP_MS = 4000;
+
+  // What the mic represents, and what (if anything) to capture alongside it
+  const SOURCE_MODES = {
+    headset: { micLabels: 'you',    capture: null },     // coordinator alone on a headset
+    room:    { micLabels: 'rotate', capture: null },     // in-person / speakerphone / operator on a phone
+    tab:     { micLabels: 'you',    capture: 'tab' },    // web meeting clients in a browser tab
+    screen:  { micLabels: 'you',    capture: 'screen' }, // desktop meeting apps via system audio (Windows)
+  };
+  let sourceMode = SOURCE_MODES.headset;
+
+  // Heuristic turn detection: rotate to the next name after a pause gap.
+  // Tracked separately per audio source so mic and capture don't interfere.
+  function makeSpeakerRotation(names) {
+    return { names, idx: 0, lastFinalTime: 0, hasSpoken: false };
+  }
+  const remoteSpeakers = makeSpeakerRotation(['Remote A', 'Remote B', 'Remote C', 'Remote D']);
+  const roomSpeakers = makeSpeakerRotation(['Speaker A', 'Speaker B', 'Speaker C', 'Speaker D']);
+
+  const IDOT_COACHING_SYSTEM = `You are the live coaching assistant for IDOT District 1 utility coordination meetings, operating inside the D1 Utility Operations Framework. Based on the recent discussion, offer ONE brief tip (2 to 3 sentences) for the coordinator. You suggest and flag; you never direct, authorize, approve or commit. Coordination is not authorization. Where it genuinely fits, name the framework instrument: SOP 01 (unknown facility intake), SOP 02 (utility nonresponse escalation), SOP 03 (SUE request and incorporation), SOP 04 (letting-readiness review), SOP 05 (record conflict resolution), SOP 06 (construction-stage field conflict), SOP 07 (permit deficiency), SOP 08 (permit lifecycle), SOP 09 (relocation sequence), the 605 ILCS 5/9-113 relocation letter chain, OPER 613, OPER 1122, or a SUE quality level. Confidence discipline: records, atlases, GIS, as-builts and utility responses are not verified subsurface condition; only a documented test hole, exposure, survey or authorized confirmation is. House style: no em dashes, no emoji, capitalize "the Department". If nothing genuinely useful applies right now, respond with exactly: NO_COACHING_NEEDED`;
+
+  const AUTHORITY_BOUNDARY = 'Coordination only; no ROW, permit, contract, funding, schedule or waiver.';
+
+  const EXTRACTION_SYSTEM = `You analyze IDOT District 1 utility coordination meeting transcripts inside the D1 Utility Operations Framework. Extract draft Issue Cards plus meeting-level items. EVIDENCE-BASED ONLY: include nothing not stated in the transcript; use null for anything not mentioned. Confidence discipline: statements made in a meeting are at best Known or Assumed; never output Verified. Set risk_color honestly: use Gray when the state is unknown, assumed or disputed; never hide uncertainty inside Yellow or Green. House style: no em dashes. Respond with valid JSON only, no markdown, using exactly this structure:
+{
+  "issueCards": [{
+    "title": "one-line issue statement",
+    "owner_stakeholder": "string|null",
+    "location": "string|null",
+    "primary_module": "GOAD|MTUC|PWS|ROI|SI|CWDM|IQPC|SM|EWRT|IMLL|DPDD|ET|SC|UFR",
+    "cluster": "Prime|Records|Subsurface|Conflict|Stakeholder|Governance",
+    "status": "New-Intake|Records-Pending|Owner-Response-Pending|Verification-Pending|Conflict-Confirmed|Permit-Review-Pending|Construction-Coordination-Pending|Ready-For-Milestone|Closed|Deferred|Disputed",
+    "risk_color": "Red|Yellow|Green|Gray",
+    "claims": [{"statement":"string","confidence":"Known|Assumed|Unknown|Disputed","source":"speaker label"}],
+    "requested_action": "string|null",
+    "responsible_party": "string|null",
+    "due_date": "YYYY-MM-DD|null",
+    "escalation_triggers": ["string"]
+  }],
+  "actionItems": [{"description":"string","assignee":"string|null","dueDate":"YYYY-MM-DD|null","priority":"high|medium|low"}],
+  "keyDecisions": [{"description":"string","madeBy":"string|null"}]
+}`;
+
+  // ─── Speech Recognition (live transcript, free, in-browser) ───────────
+  function getRecognitionCtor() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition;
+  }
+
+  // One recognizer per audio source. With no track, the browser uses the
+  // default microphone; with a track (captured tab audio), recognition runs
+  // on that stream instead — recognition.start(track), current Chrome/Edge.
+  function makeRecognizer(source, track) {
+    const Ctor = getRecognitionCtor();
+    const rec = new Ctor();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+    let active = false;
+
+    rec.onresult = (event) => {
+      let interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        const text = result[0].transcript.trim();
+        if (!text) continue;
+        if (result.isFinal) {
+          appendFinalSegment(text, source);
+        } else {
+          interimText += text + ' ';
+        }
+      }
+      renderInterim(interimText.trim(), source);
+    };
+
+    rec.onerror = (e) => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      console.error(`Speech recognition error (${source}):`, e.error);
+      if (e.error === 'not-allowed' && source === 'mic') {
+        toast('Microphone access denied. Check browser permissions.');
+        stopListening();
+      }
+    };
+
+    rec.onend = () => {
+      // Browsers auto-stop after silence/timeouts — restart seamlessly while running
+      if (running && active) {
+        try { track ? rec.start(track) : rec.start(); } catch { /* already starting or track gone */ }
+      }
+    };
+
+    return {
+      start() {
+        // May throw (e.g. track input unsupported) — caller handles fallback
+        track ? rec.start(track) : rec.start();
+        active = true;
+      },
+      stop() {
+        active = false;
+        try { rec.stop(); } catch {}
+      },
+    };
+  }
+
+  function rotationFor(source) {
+    if (source === 'tab') return remoteSpeakers; // captured audio (tab or system)
+    return sourceMode.micLabels === 'rotate' ? roomSpeakers : null;
+  }
+
+  function labelFor(source) {
+    const rot = rotationFor(source);
+    if (!rot) return 'You';
+    const now = Date.now();
+    if (rot.hasSpoken && now - rot.lastFinalTime >= TURN_GAP_MS) {
+      rot.idx = (rot.idx + 1) % rot.names.length;
+    }
+    rot.lastFinalTime = now;
+    rot.hasSpoken = true;
+    return rot.names[rot.idx];
+  }
+
+  function currentLabel(source) {
+    const rot = rotationFor(source);
+    return rot ? rot.names[rot.idx] : 'You';
+  }
+
+  function appendFinalSegment(text, source) {
+    segments.push({ speaker: labelFor(source), text, ts: Date.now(), source });
+    renderTranscript();
+    maybeScheduleCoaching();
+  }
+
+  function renderInterim(text, source) {
+    const body = document.getElementById('transcriptBody');
+    const id = `interimSegment-${source}`;
+    let interimEl = document.getElementById(id);
+    if (!text) {
+      if (interimEl) interimEl.remove();
+      return;
+    }
+    if (!interimEl) {
+      interimEl = document.createElement('div');
+      interimEl.id = id;
+      interimEl.className = 'segment interim';
+      body.appendChild(interimEl);
+    }
+    interimEl.innerHTML = `<div class="meta"><span class="speaker${source === 'tab' ? ' remote' : ''}">${currentLabel(source)}</span></div><div class="text">${escapeHtml(text)}</div>`;
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function renderTranscript() {
+    const body = document.getElementById('transcriptBody');
+    const emptyMsg = body.querySelector('.transcript-empty');
+    if (emptyMsg) emptyMsg.remove();
+
+    body.innerHTML = segments.map(seg => `
+      <div class="segment">
+        <div class="meta"><span class="speaker${seg.source === 'tab' ? ' remote' : ''}">${escapeHtml(seg.speaker)}</span><span>${formatTime(seg.ts)}</span></div>
+        <div class="text">${escapeHtml(seg.text)}</div>
+      </div>
+    `).join('');
+    body.scrollTop = body.scrollHeight;
+    document.getElementById('wordCount').textContent =
+      segments.reduce((n, s) => n + s.text.split(/\s+/).filter(Boolean).length, 0) + ' words';
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function formatTime(ts) {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  // ─── Mic level meter (visual feedback only, uses Web Audio API) ──────
+  async function startLevelMeter() {
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioContext.createMediaStreamSource(micStream);
+      source.connect(analyser);
+
+      // Fold captured tab audio into the same level meter (analyser has no
+      // output connection, so this never affects what the user hears)
+      const tabTrack = displayStream && displayStream.getAudioTracks()[0];
+      if (tabTrack) {
+        audioContext.createMediaStreamSource(new MediaStream([tabTrack])).connect(analyser);
+      }
+
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const fill = document.getElementById('micLevelFill');
+
+      function tick() {
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        fill.style.width = Math.min(100, (avg / 128) * 100) + '%';
+        levelRAF = requestAnimationFrame(tick);
+      }
+      tick();
+    } catch (err) {
+      console.warn('Mic level meter unavailable:', err);
+    }
+  }
+
+  function stopLevelMeter() {
+    if (levelRAF) cancelAnimationFrame(levelRAF);
+    levelRAF = null;
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (audioContext) { audioContext.close().catch(() => {}); audioContext = null; }
+    document.getElementById('micLevelFill').style.width = '0%';
+  }
+
+  // ─── Coaching (Copilot) ─────────────────────────────────────────────
+  function maybeScheduleCoaching() {
+    if (!running) return;
+    const interval = getInterval();
+    const now = Date.now();
+    if (now - lastCoachedAt < interval) return;
+    lastCoachedAt = now;
+    requestCoaching();
+  }
+
+  // One entry point for every AI call — coaching and end-of-meeting extraction
+  // both route through the configured provider.
+  async function getCompletion(systemPrompt, userText, maxTokens) {
+    const provider = getProvider();
+    return provider === 'builtin' ? builtinGetInsight(systemPrompt, userText)
+      : provider === 'm365' ? m365GetInsight(systemPrompt, userText, maxTokens)
+      : provider === 'anthropic' ? anthropicGetInsight(systemPrompt, userText, maxTokens)
+      : provider === 'aio' ? aioGetInsight(systemPrompt, userText, maxTokens)
+      : githubGetInsight(systemPrompt, userText, maxTokens);
+  }
+
+  function providerConfigured() {
+    const p = getProvider();
+    return p === 'builtin' ? builtinAvailable()
+      : p === 'm365' ? !!m365Token()
+      : p === 'anthropic' ? !!localStorage.getItem(LS.anthropicKey)
+      : p === 'aio' ? !!localStorage.getItem(LS.aioBaseUrl)
+      : !!getToken();
+  }
+
+  // ── Provider: built-in workspace assistant (no key) ──
+  async function builtinGetInsight(systemPrompt, userText) {
+    const reply = await window.claude.complete(`${systemPrompt}\n\n${userText}`);
+    return (reply || '').trim() || null;
+  }
+
+  async function requestCoaching() {
+    const recentText = segments.slice(-12).map(s => `${s.speaker}: ${s.text}`).join('\n');
+    if (!recentText.trim()) return;
+
+    try {
+      const text = await getCompletion(IDOT_COACHING_SYSTEM, `Recent meeting discussion:\n\n${recentText}`, 180);
+      if (text && text !== 'NO_COACHING_NEEDED') {
+        addInsight(text);
+      }
+    } catch (err) {
+      console.error('Coaching request error:', err);
+    }
+  }
+
+  // ── Provider: GitHub Copilot ──
+  async function githubGetInsight(systemPrompt, userText, maxTokens) {
+    const token = getToken();
+    if (!token) return null; // silently skip if no key configured
+
+    const res = await fetch('https://api.githubcopilot.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Copilot-Integration-Id': 'idot-sidecar',
+        'Editor-Version': 'idot-sidecar/1.0.0',
+      },
+      body: JSON.stringify({
+        model: getModel(),
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userText },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) toast('GitHub token invalid or Copilot not enabled for this account.');
+      console.error('Copilot request failed:', res.status, await res.text().catch(() => ''));
+      return null;
+    }
+
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  }
+
+  // ── Provider: self-hosted / open-source, OpenAI-compatible ──
+  // Works with AIO Orchestrator, Ollama, LiteLLM, vLLM, LM Studio — anything
+  // speaking POST {base}/v1/chat/completions. Transcript text stays on the
+  // org's own infrastructure.
+  let aioWarned = false;
+
+  // Accept bases with or without a trailing /v1 — NVIDIA NIM's hosted endpoint
+  // is https://integrate.api.nvidia.com/v1, local servers usually bare host:port.
+  function aioApiUrl(base, path) {
+    return base.replace(/\/v1$/, '') + '/v1/' + path;
+  }
+
+  async function aioGetInsight(systemPrompt, userText, maxTokens) {
+    const base = (localStorage.getItem(LS.aioBaseUrl) || '').replace(/\/+$/, '');
+    if (!base) return null; // silently skip if no server configured
+
+    const key = localStorage.getItem(LS.aioKey) || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (key) headers['Authorization'] = `Bearer ${key}`;
+
+    let res;
+    try {
+      const payload = {
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userText },
+        ],
+      };
+      const model = localStorage.getItem(LS.aioModel) || '';
+      if (model) payload.model = model; // omitted → the server's default model
+      res = await fetch(aioApiUrl(base, 'chat/completions'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      if (!aioWarned) {
+        aioWarned = true;
+        toast("Can't reach the self-hosted AI server. Check the Base URL, that it's running, and that CORS is enabled.");
+      }
+      console.error('Self-hosted AI request error:', err);
+      return null;
+    }
+
+    if (!res.ok) {
+      if (res.status === 401) toast('Self-hosted AI server rejected the API key.');
+      console.error('Self-hosted AI request failed:', res.status, await res.text().catch(() => ''));
+      return null;
+    }
+
+    aioWarned = false; // server reachable again
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  }
+
+  // Populate the model-name autocomplete from the server's /v1/models list,
+  // so a coordinator never has to know model names — just the Base URL.
+  let aioModelsFetchedFor = '';
+  async function refreshAioModels() {
+    const base = (document.getElementById('aioBaseUrl').value.trim() ||
+      localStorage.getItem(LS.aioBaseUrl) || '').replace(/\/+$/, '');
+    if (!base || base === aioModelsFetchedFor) return;
+
+    const key = document.getElementById('aioKey').value.trim() || localStorage.getItem(LS.aioKey) || '';
+    try {
+      const res = await fetch(aioApiUrl(base, 'models'), {
+        headers: key ? { 'Authorization': `Bearer ${key}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const ids = (data.data || []).map(m => m.id).filter(Boolean);
+      document.getElementById('aioModels').innerHTML =
+        ids.map(id => `<option value="${escapeHtml(id)}">`).join('');
+      aioModelsFetchedFor = base;
+    } catch { /* server unreachable — leave the list empty */ }
+  }
+
+  // ── Provider: Claude (Anthropic Messages API, direct from browser) ──
+  async function anthropicGetInsight(systemPrompt, userText, maxTokens) {
+    const key = localStorage.getItem(LS.anthropicKey) || '';
+    if (!key) return null; // silently skip if no key configured
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: localStorage.getItem(LS.anthropicModel) || 'claude-haiku-4-5-20251001',
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userText }],
+      }),
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) toast('Anthropic API key invalid.');
+      console.error('Anthropic request failed:', res.status, await res.text().catch(() => ''));
+      return null;
+    }
+
+    const data = await res.json();
+    return data.content?.[0]?.text?.trim() || null;
+  }
+
+  // ── Provider: Microsoft 365 Copilot (Graph Chat API, Preview) ──
+  // One Copilot conversation per meeting; each coaching request is a turn in
+  // it, so M365 Copilot keeps running context. Web grounding is explicitly
+  // disabled — nothing is sent to web search.
+  const m365 = { accessToken: null, expiresAt: 0, conversationId: null, warned: false };
+
+  // The Chat API requires this full delegated-permission set (per Microsoft docs)
+  const M365_SCOPES = [
+    'Sites.Read.All', 'Mail.Read', 'People.Read.All', 'OnlineMeetingTranscript.Read.All',
+    'Chat.Read', 'ChannelMessage.Read.All', 'ExternalItem.Read.All',
+  ].map(s => `https://graph.microsoft.com/${s}`).join(' ');
+
+  function m365Token() {
+    return m365.accessToken && Date.now() < m365.expiresAt - 60_000 ? m365.accessToken : null;
+  }
+
+  async function m365GetInsight(systemPrompt, userText, maxTokens) {
+    const token = m365Token();
+    if (!token) {
+      if (!m365.warned) {
+        m365.warned = true;
+        toast('Sign in to Microsoft 365 in Settings to enable live coaching.');
+      }
+      return null;
+    }
+
+    const graphHeaders = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    if (!m365.conversationId) {
+      const res = await fetch('https://graph.microsoft.com/beta/copilot/conversations', {
+        method: 'POST', headers: graphHeaders, body: '{}',
+      });
+      if (!res.ok) { m365Fail(res); return null; }
+      m365.conversationId = (await res.json()).id;
+    }
+
+    const res = await fetch(`https://graph.microsoft.com/beta/copilot/conversations/${m365.conversationId}/chat`, {
+      method: 'POST',
+      headers: graphHeaders,
+      body: JSON.stringify({
+        message: { text: `${systemPrompt}\n\n${userText}` },
+        contextualResources: { webContext: { isWebEnabled: false } },
+      }),
+    });
+    if (!res.ok) { m365Fail(res); return null; }
+
+    const data = await res.json();
+    const reply = (data.messages || [])
+      .filter(m => (m['@odata.type'] || '').includes('copilotConversationResponseMessage'))
+      .pop();
+    return reply?.text?.trim() || null;
+  }
+
+  function m365Fail(res) {
+    if (res.status === 401) {
+      m365.accessToken = null;
+      toast('Microsoft 365 session expired. Sign in again in Settings.');
+      updateM365Status();
+    } else if (res.status === 403) {
+      toast('Microsoft 365 Copilot access denied. Check your Copilot license and app permissions.');
+    }
+    console.error('M365 Copilot request failed:', res.status);
+    res.text().then(t => console.error(t)).catch(() => {});
+  }
+
+  // ── M365 sign-in: OAuth2 authorization-code + PKCE in a popup ──
+  function b64url(bytes) {
+    return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function randomString(len) {
+    const bytes = new Uint8Array(len);
+    crypto.getRandomValues(bytes);
+    return b64url(bytes).slice(0, len);
+  }
+
+  async function m365SignIn() {
+    const tenant = document.getElementById('m365Tenant').value.trim();
+    const client = document.getElementById('m365Client').value.trim();
+    if (!tenant || !client) { toast('Enter the Tenant ID and Client ID first.'); return; }
+    localStorage.setItem(LS.m365Tenant, tenant);
+    localStorage.setItem(LS.m365Client, client);
+
+    const verifier = randomString(64);
+    const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+    const state = randomString(24);
+    localStorage.setItem(LS.m365Pkce, JSON.stringify({ verifier, state }));
+
+    const params = new URLSearchParams({
+      client_id: client,
+      response_type: 'code',
+      redirect_uri: location.origin + location.pathname,
+      scope: M365_SCOPES,
+      state,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      prompt: 'select_account',
+    });
+    window.open(
+      `https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/authorize?${params}`,
+      'm365auth', 'width=480,height=680'
+    );
+  }
+
+  // Runs in the popup after Entra redirects back to this same page with ?code=
+  async function completeM365Auth() {
+    const query = new URLSearchParams(location.search);
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS.m365Pkce) || '{}');
+      localStorage.removeItem(LS.m365Pkce);
+      if (!saved.verifier || query.get('state') !== saved.state) throw new Error('State mismatch');
+
+      const tenant = localStorage.getItem(LS.m365Tenant) || 'organizations';
+      const res = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: localStorage.getItem(LS.m365Client) || '',
+          grant_type: 'authorization_code',
+          code: query.get('code'),
+          redirect_uri: location.origin + location.pathname,
+          code_verifier: saved.verifier,
+        }),
+      });
+      const data = await res.json();
+      if (!data.access_token) throw new Error(data.error_description || 'Token exchange failed');
+      window.opener.postMessage(
+        { type: 'idot-m365-token', accessToken: data.access_token, expiresIn: data.expires_in },
+        location.origin
+      );
+    } catch (err) {
+      window.opener.postMessage(
+        { type: 'idot-m365-token', error: String((err && err.message) || err) },
+        location.origin
+      );
+    } finally {
+      window.close();
+    }
+  }
+
+  function updateM365Status() {
+    const el = document.getElementById('m365Status');
+    if (el) el.textContent = m365Token() ? 'Signed in' : 'Not signed in';
+  }
+
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== 'idot-m365-token') return;
+    if (e.data.error) { toast('Microsoft sign-in failed: ' + e.data.error); return; }
+    m365.accessToken = e.data.accessToken;
+    m365.expiresAt = Date.now() + (e.data.expiresIn || 3600) * 1000;
+    m365.warned = false;
+    updateM365Status();
+    toast('Signed in to Microsoft 365.');
+  });
+
+  function addInsight(text) {
+    const list = document.getElementById('insightsList');
+    const empty = list.querySelector('.insight-empty');
+    if (empty) empty.remove();
+
+    const card = document.createElement('div');
+    card.className = 'insight-card';
+    card.innerHTML = `
+      <button class="dismiss" title="Dismiss">&times;</button>
+      <span class="time">${formatTime(Date.now())}</span>
+      ${escapeHtml(text)}
+    `;
+    card.querySelector('.dismiss').onclick = () => card.remove();
+    list.prepend(card);
+  }
+
+  // ─── Sample meeting (demo the full pipeline with no microphone) ──────
+  const SAMPLE_MEETING = [
+    ['You', 'mic', 'Good morning, this is the utility coordination meeting for the IL-64 resurfacing, contract 62B45, letting targeted for November.'],
+    ['Remote A', 'tab', 'Ameren here. Our atlas shows a 12 inch gas main on the north side, but that record dates to 1987 and we have not verified depth.'],
+    ['You', 'mic', 'Noted. The storm sewer profile at station 45 plus 50 would cross that main. Until we get verification I am treating depth as assumed, not verified.'],
+    ['Remote B', 'tab', 'ComEd. We have three poles in the widening footprint. We cannot set the new poles until the fiber licensees transfer, and AT&T has not answered our last two notices.'],
+    ['You', 'mic', 'That sounds like a nonresponse escalation. I will send the follow-up notice and log the dates. If there is no answer in two weeks it goes up the chain.'],
+    ['Remote A', 'tab', 'If the gas main does conflict, relocation design takes six weeks and construction another eight, weather permitting.'],
+    ['You', 'mic', 'That puts us tight against the letting. I would like a test hole at the crossing to settle depth, and I will request SUE quality level A at that location.'],
+    ['Remote B', 'tab', 'One more: the joint use pole at Main and Fifth also carries a city fire alarm circuit. The city has to move first, then AT&T, then us.'],
+    ['You', 'mic', 'So the pole chain is city, then AT&T, then ComEd, and letting readiness depends on the whole chain. I will map that dependency and flag it.'],
+    ['Remote A', 'tab', 'Send us the sewer profile sheets and we will confirm conflict or clearance within ten business days.'],
+    ['You', 'mic', 'Will do today. To close: Ameren confirms conflict or clearance by the twentieth, I request the test hole and SUE, and I send the AT&T escalation notice this week.'],
+  ];
+
+  function loadSample() {
+    if (running) { toast('Stop listening before loading the sample.'); return; }
+    if (segments.length) { toast('Transcript already has content. Sample not loaded.'); return; }
+    const titleEl = document.getElementById('meetingTitle');
+    if (!titleEl.value.trim()) titleEl.value = 'IL-64 Utility Coordination (sample)';
+    meetingStartTime = Date.now() - SAMPLE_MEETING.length * 9000;
+    SAMPLE_MEETING.forEach(([speaker, source, text], i) => {
+      segments.push({ speaker, text, ts: meetingStartTime + i * 9000, source });
+    });
+    renderTranscript();
+    toast('Sample meeting loaded. Try Suggest a tip or the exports.');
+  }
+
+  // ─── Start / Stop ───────────────────────────────────────────────────
+  function cleanupDisplayStream() {
+    if (displayStream) {
+      displayStream.getTracks().forEach(t => t.stop());
+      displayStream = null;
+    }
+  }
+
+  async function captureMeetingAudio(kind) {
+    // Returns the captured audio track, or null (with a toast) on any failure.
+    // 'tab'    → share a browser tab with its audio (web meeting clients)
+    // 'screen' → share the entire screen with system audio, which captures
+    //            desktop meeting apps (WebEx/Teams/Zoom) — Windows Chrome/Edge
+    const constraints = {
+      video: true, // required for the share picker; stopped immediately below
+      audio: { suppressLocalAudioPlayback: false }, // keep the meeting audible
+    };
+    if (kind === 'screen') constraints.systemAudio = 'include';
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia(constraints);
+    } catch {
+      toast('Capture cancelled. Continuing mic-only.');
+      return null;
+    }
+    stream.getVideoTracks().forEach(t => t.stop());
+    const track = stream.getAudioTracks()[0];
+    if (!track) {
+      stream.getTracks().forEach(t => t.stop());
+      toast(kind === 'screen'
+        ? "No system audio shared. Choose 'Entire screen' and tick 'Also share system audio' (Windows only). Continuing mic-only."
+        : "No tab audio shared. Pick a Chrome tab and tick 'Also share tab audio'. Continuing mic-only.");
+      return null;
+    }
+    displayStream = stream;
+    return track;
+  }
+
+  async function startListening() {
+    if (running || starting) return;
+    if (!getRecognitionCtor()) {
+      toast('Speech recognition is not supported in this browser. Use Chrome or Edge.');
+      return;
+    }
+
+    starting = true;
+    sourceMode = SOURCE_MODES[document.getElementById('sourceSelect').value] || SOURCE_MODES.headset;
+    const tabTrack = sourceMode.capture ? await captureMeetingAudio(sourceMode.capture) : null;
+    starting = false;
+
+    running = true;
+    micRecognizer = makeRecognizer('mic', null);
+    try {
+      micRecognizer.start();
+    } catch (err) {
+      console.error(err);
+      running = false;
+      micRecognizer = null;
+      cleanupDisplayStream();
+      return;
+    }
+
+    if (tabTrack) {
+      tabRecognizer = makeRecognizer('tab', tabTrack);
+      try {
+        tabRecognizer.start();
+        tabTrack.onended = () => {
+          // User clicked the browser's "Stop sharing" bar mid-meeting
+          if (tabRecognizer) { tabRecognizer.stop(); tabRecognizer = null; }
+          renderInterim('', 'tab');
+          document.getElementById('statusLine').textContent = 'Listening: mic only';
+          toast('Tab sharing ended. Continuing mic-only.');
+        };
+      } catch (err) {
+        console.error('Tab-audio recognition unsupported:', err);
+        tabRecognizer = null;
+        cleanupDisplayStream();
+        toast('This browser cannot transcribe tab audio. Update Chrome or Edge; continuing mic-only.');
+      }
+    }
+
+    meetingStartTime = Date.now();
+    lastCoachedAt = 0;
+    m365.conversationId = null; // fresh Copilot conversation per meeting
+    document.getElementById('liveDot').classList.add('live');
+    document.getElementById('startBtn').textContent = 'Stop Listening';
+    document.getElementById('startBtn').classList.remove('btn-primary');
+    document.getElementById('startBtn').classList.add('btn-danger');
+    document.getElementById('sourceSelect').disabled = true;
+    document.getElementById('statusLine').textContent = tabRecognizer
+      ? (sourceMode.capture === 'screen' ? 'Listening: mic + computer audio' : 'Listening: mic + tab audio')
+      : (sourceMode.micLabels === 'rotate' ? 'Listening: room audio' : 'Listening: mic only');
+    startLevelMeter();
+  }
+
+  function stopListening() {
+    running = false;
+    if (micRecognizer) { micRecognizer.stop(); micRecognizer = null; }
+    if (tabRecognizer) { tabRecognizer.stop(); tabRecognizer = null; }
+    renderInterim('', 'mic');
+    renderInterim('', 'tab');
+    cleanupDisplayStream();
+    document.getElementById('sourceSelect').disabled = false;
+    stopLevelMeter();
+    document.getElementById('liveDot').classList.remove('live');
+    document.getElementById('startBtn').textContent = 'Start Listening';
+    document.getElementById('startBtn').classList.remove('btn-danger');
+    document.getElementById('startBtn').classList.add('btn-primary');
+    document.getElementById('statusLine').textContent = segments.length
+      ? 'Stopped. Transcript preserved below.'
+      : 'Idle: click Start Listening';
+
+    if (segments.length > 0) {
+      const title = document.getElementById('meetingTitle').value.trim() || 'Untitled meeting';
+      saveMeetingToHistory({
+        title,
+        date: new Date(meetingStartTime || Date.now()).toISOString(),
+        wordCount: segments.reduce((n, s) => n + s.text.split(/\s+/).filter(Boolean).length, 0),
+        segments: segments.slice(),
+      });
+      renderHistory();
+    }
+  }
+
+  // ─── Export ─────────────────────────────────────────────────────────
+  function exportMeeting() {
+    const title = document.getElementById('meetingTitle').value.trim() || 'Untitled meeting';
+    const dateStr = new Date(meetingStartTime || Date.now()).toLocaleString();
+    let out = `${title}\n${dateStr}\n${'='.repeat(40)}\n\nTRANSCRIPT\n\n`;
+    out += segments.map(s => `[${formatTime(s.ts)}] ${s.speaker}: ${s.text}`).join('\n');
+
+    const insightEls = document.querySelectorAll('.insight-card');
+    if (insightEls.length) {
+      out += `\n\n${'='.repeat(40)}\n\nCOACHING INSIGHTS\n\n`;
+      insightEls.forEach(el => {
+        const time = el.querySelector('.time').textContent;
+        const text = el.textContent.replace(time, '').replace('×', '').trim();
+        out += `[${time}] ${text}\n\n`;
+      });
+    }
+
+    navigator.clipboard.writeText(out).then(() => {
+      toast('Meeting notes copied to clipboard.');
+    }).catch(() => {
+      // Fallback: open print dialog
+      const w = window.open('', '_blank');
+      w.document.write(`<pre style="white-space:pre-wrap;font-family:sans-serif;padding:20px;">${escapeHtml(out)}</pre>`);
+      w.document.close();
+      w.print();
+    });
+  }
+
+  // ─── Structured export (.meeting.json + AIO brief) ─────────────────────
+  // Evidence-based, provenance-carrying output — designed so a coordinator
+  // can drop the file into a watched inbox (iUTIEMS/iCURIS-style ingestion)
+  // or feed the brief to `aio run --brief`.
+
+  function collectInsights() {
+    return [...document.querySelectorAll('.insight-card')].map(el => {
+      const time = el.querySelector('.time').textContent;
+      return { time, text: el.textContent.replace(time, '').replace('×', '').trim() };
+    });
+  }
+
+  async function extractStructuredData() {
+    const transcriptText = segments.map(s => `${s.speaker}: ${s.text}`).join('\n');
+    const raw = await getCompletion(EXTRACTION_SYSTEM, `TRANSCRIPT:\n\n${transcriptText}`, 2000);
+    if (!raw) return null;
+    try { return JSON.parse(raw); }
+    catch {
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) { try { return JSON.parse(m[0]); } catch { /* fall through */ } }
+      console.error('Failed to parse extraction response:', raw.slice(0, 200));
+      return null;
+    }
+  }
+
+  function downloadFile(name, text, mime) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function meetingMeta() {
+    const title = document.getElementById('meetingTitle').value.trim() || 'Untitled meeting';
+    const startTs = meetingStartTime || (segments[0] && segments[0].ts) || Date.now();
+    const dateIso = new Date(startTs).toISOString();
+    return {
+      title,
+      dateIso,
+      fileStem: `IDOT-Sidecar_${title.replace(/[^\w-]+/g, '-')}_${dateIso.slice(0, 10)}`,
+      sourceKey: `${title}_${dateIso.slice(0, 10)}`,
+    };
+  }
+
+  // Stamp the client-owned Issue Card constants: a draft id (not a registry
+  // number), the authority boundary, and the human-approval flags the agent
+  // may never change.
+  function stampIssueCards(cards) {
+    if (!cards || !cards.length) return null;
+    const year = new Date().getFullYear();
+    return cards.map((c, i) => ({
+      card_id: `UTL-${year}-DRAFT-${String(i + 1).padStart(2, '0')}`,
+      ...c,
+      authority_boundary: AUTHORITY_BOUNDARY,
+      approval_status: 'none',
+      needs_human_approval: true,
+      drafted_by: 'IDOT Sidecar (meeting extraction)',
+    }));
+  }
+
+  async function runExtractionWithButton(btn) {
+    if (!providerConfigured()) return null;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Extracting…';
+    try { return await extractStructuredData(); }
+    catch (err) { console.error('Extraction failed:', err); return null; }
+    finally { btn.disabled = false; btn.textContent = original; }
+  }
+
+  async function exportJson() {
+    if (!segments.length) { toast('Nothing to export yet.'); return; }
+    const meta = meetingMeta();
+    const extracted = await runExtractionWithButton(document.getElementById('exportJsonBtn'));
+    if (providerConfigured() && !extracted) toast('AI extraction failed. Exporting transcript only.');
+
+    const doc = {
+      exportVersion: 1,
+      source: 'IDOT Sidecar',
+      meeting: {
+        title: meta.title,
+        date: meta.dateIso,
+        durationSeconds: Math.round((segments[segments.length - 1].ts - (meetingStartTime || segments[0].ts)) / 1000),
+        wordCount: segments.reduce((n, s) => n + s.text.split(/\s+/).filter(Boolean).length, 0),
+        captureMode: document.getElementById('sourceSelect').value,
+      },
+      provenance: {
+        METHOD: extracted ? 'live-transcription+ai-extraction' : 'live-transcription',
+        SOURCE: meta.sourceKey,
+        DATE_COLLECTED: new Date().toISOString(),
+        aiProvider: extracted ? getProvider() : null,
+        evidenceNote: 'Extracted only from statements in the attached transcript',
+      },
+      draft: true,
+      needsHumanApproval: true,
+      authorityBoundary: AUTHORITY_BOUNDARY,
+      issueCards: stampIssueCards(extracted?.issueCards),
+      actionItems: extracted?.actionItems ?? null,
+      keyDecisions: extracted?.keyDecisions ?? null,
+      insights: collectInsights(),
+      transcript: segments.map(s => ({ speaker: s.speaker, text: s.text, timestamp: new Date(s.ts).toISOString() })),
+    };
+
+    downloadFile(`${meta.fileStem}.meeting.json`, JSON.stringify(doc, null, 2), 'application/json');
+    toast(extracted ? 'Structured meeting JSON downloaded.' : 'Transcript JSON downloaded (no AI extraction).');
+  }
+
+  // Render meeting outcomes as a brief.md consumable by `aio run --brief`,
+  // so the follow-up work becomes an orchestratable AIO run. Draft only.
+  async function exportBrief() {
+    if (!segments.length) { toast('Nothing to export yet.'); return; }
+    if (!providerConfigured()) {
+      toast('The follow-up brief needs AI extraction. Configure a provider in Settings first.');
+      return;
+    }
+    const meta = meetingMeta();
+    const x = await runExtractionWithButton(document.getElementById('exportBriefBtn'));
+    if (!x) { toast('AI extraction failed. Cannot build the brief.'); return; }
+    const cards = stampIssueCards(x.issueCards) || [];
+
+    const lines = [];
+    lines.push(`# Meeting Follow-up Brief: ${meta.title}`);
+    lines.push('');
+    lines.push(`Generated by IDOT Sidecar from the ${meta.dateIso.slice(0, 10)} utility coordination meeting.`);
+    lines.push(`Evidence-based: everything below traces to statements in the meeting transcript (SOURCE: ${meta.sourceKey}).`);
+    lines.push(`Authority boundary: ${AUTHORITY_BOUNDARY} This is a draft; a human with proper authority approves, sends and commits.`);
+    lines.push('');
+    lines.push('## Mission');
+    lines.push('');
+    lines.push(`Complete the follow-up actions recorded in the "${meta.title}" utility coordination meeting.`);
+    lines.push('');
+    if (x.keyDecisions?.length) {
+      lines.push('## Context: decisions already made');
+      lines.push('');
+      x.keyDecisions.forEach(d => lines.push(`- ${d.description}${d.madeBy ? ` (decided by ${d.madeBy})` : ''}`));
+      lines.push('');
+    }
+    if (cards.length) {
+      lines.push('## Context: draft issue cards in play');
+      lines.push('');
+      cards.forEach(c => lines.push(`- ${c.card_id} [${c.risk_color}] ${c.title}${c.owner_stakeholder ? ` (${c.owner_stakeholder})` : ''}${c.location ? ` at ${c.location}` : ''}; module ${c.primary_module}, status ${c.status}`));
+      lines.push('');
+    }
+    lines.push('## Acceptance criteria');
+    lines.push('');
+    if (x.actionItems?.length) {
+      x.actionItems.forEach((a, i) => lines.push(`- AC${i + 1}: ${a.description}${a.assignee ? ` (owner: ${a.assignee})` : ''}${a.dueDate ? `, due ${a.dueDate}` : ''} [priority: ${a.priority}]`));
+    } else {
+      lines.push('- AC1: no action items were recorded in this meeting.');
+    }
+    lines.push('');
+    const riskCards = cards.filter(c => c.risk_color === 'Red' || c.risk_color === 'Gray');
+    if (riskCards.length) {
+      lines.push('## Constraints: risks to respect');
+      lines.push('');
+      riskCards.forEach(c => lines.push(`- [${c.risk_color}] ${c.title}${c.requested_action ? `; requested action: ${c.requested_action}` : ''}`));
+      lines.push('');
+    }
+    lines.push('## Non-goals');
+    lines.push('');
+    lines.push('- Nothing beyond the actions and decisions recorded in this meeting.');
+    lines.push('- No authorization of any kind: coordination is not authorization.');
+    lines.push('');
+
+    downloadFile(`${meta.fileStem}.brief.md`, lines.join('\n'), 'text/markdown');
+    toast('Follow-up brief downloaded. Run it with: aio run --brief <file>');
+  }
+
+  // ─── History rendering ──────────────────────────────────────────────
+  function renderHistory() {
+    const list = document.getElementById('historyList');
+    const hist = getHistory();
+    if (!hist.length) {
+      list.innerHTML = '<div class="history-item" style="color:var(--text-dim)">No meetings yet</div>';
+      return;
+    }
+    list.innerHTML = hist.map((m, i) => `
+      <div class="history-item" data-idx="${i}">
+        <span>${escapeHtml(m.title)} (${m.wordCount} words)</span>
+        <span class="date">${new Date(m.date).toLocaleDateString()}</span>
+      </div>
+    `).join('');
+  }
+
+  // ─── Settings modal ─────────────────────────────────────────────────
+  function openSettings() {
+    loadSettings();
+    renderHistory();
+    document.getElementById('settingsModal').classList.add('open');
+    if (document.getElementById('providerSelect').value === 'aio') refreshAioModels();
+  }
+  function closeSettings() {
+    document.getElementById('settingsModal').classList.remove('open');
+  }
+  function saveSettings() {
+    localStorage.setItem(LS.token, document.getElementById('ghToken').value.trim());
+    localStorage.setItem(LS.model, document.getElementById('modelSelect').value);
+    localStorage.setItem(LS.interval, document.getElementById('intervalSelect').value);
+    localStorage.setItem(LS.provider, document.getElementById('providerSelect').value);
+    localStorage.setItem(LS.m365Tenant, document.getElementById('m365Tenant').value.trim());
+    localStorage.setItem(LS.m365Client, document.getElementById('m365Client').value.trim());
+    localStorage.setItem(LS.anthropicKey, document.getElementById('anthropicKey').value.trim());
+    localStorage.setItem(LS.anthropicModel, document.getElementById('anthropicModel').value);
+    localStorage.setItem(LS.aioBaseUrl, document.getElementById('aioBaseUrl').value.trim().replace(/\/+$/, ''));
+    localStorage.setItem(LS.aioKey, document.getElementById('aioKey').value.trim());
+    localStorage.setItem(LS.aioModel, document.getElementById('aioModel').value.trim());
+    closeSettings();
+    toast('Settings saved.');
+  }
+
+  // ─── Wire up events ─────────────────────────────────────────────────
+  document.getElementById('startBtn').addEventListener('click', () => {
+    running ? stopListening() : startListening();
+  });
+  document.getElementById('exportBtn').addEventListener('click', exportMeeting);
+  document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
+  document.getElementById('exportBriefBtn').addEventListener('click', exportBrief);
+  // The Load sample button lives inside the transcript empty state, which is
+  // replaced on first render, so listen via delegation.
+  document.getElementById('transcriptBody').addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'loadSampleBtn') loadSample();
+  });
+  document.getElementById('suggestTipBtn').addEventListener('click', () => {
+    if (!segments.length) { toast('Nothing has been said yet. Start listening or load the sample first.'); return; }
+    if (!providerConfigured()) { toast('Configure an AI provider in Settings first.'); return; }
+    lastCoachedAt = Date.now();
+    requestCoaching();
+  });
+  document.getElementById('settingsBtn').addEventListener('click', openSettings);
+  document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+  document.getElementById('providerSelect').addEventListener('change', () => {
+    applyProviderVisibility();
+    if (document.getElementById('providerSelect').value === 'aio') refreshAioModels();
+  });
+  document.getElementById('m365SignInBtn').addEventListener('click', m365SignIn);
+  document.getElementById('aioBaseUrl').addEventListener('change', refreshAioModels);
+  document.getElementById('settingsModal').addEventListener('click', (e) => {
+    if (e.target.id === 'settingsModal') closeSettings();
+  });
+  document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+    localStorage.removeItem(LS.history);
+    renderHistory();
+    toast('History cleared.');
+  });
+
+  window.addEventListener('beforeunload', (e) => {
+    if (running && segments.length > 0) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
+  // Diagnostics hook — lets automated tests and console debugging drive the
+  // transcript/coaching pipeline without a live microphone. Harmless in use.
+  window.__idotTest = { appendFinalSegment, requestCoaching, segments };
+
+  // ─── Init ───────────────────────────────────────────────────────────
+  if (window.opener && new URLSearchParams(location.search).get('code')) {
+    // This page is running as the OAuth redirect target inside the sign-in
+    // popup — finish the token exchange and close; the opener gets the token.
+    completeM365Auth();
+  } else {
+    loadSettings();
+    renderHistory();
+    const configured = providerConfigured();
+    if (!configured) {
+      setTimeout(() => toast('Tip: open Settings to configure your AI provider for live coaching.'), 800);
+    }
+  }
+})();
+</script>
+</body>
+</html>

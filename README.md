@@ -94,3 +94,5 @@ Extraction is evidence-based only: nothing that is not stated in the transcript,
 ## Development
 
 This is intentionally a single static file with no build tooling. To make changes, edit `idot-sidecar.html` directly and open it in a browser to test: no `npm install`, no dev server. House style follows the D1 Framework copy conventions: no em or en dashes in user-visible text, no emoji or arrow glyphs in prose, "the Department" capitalized, and protective wording preserved (coordination is not authorization).
+
+The app is distributed in lockstep to four places (this repo is canonical; the framework workspace and Offline Package, the Claude Design project, and a claude.ai artifact are derived). After any change, run `node tools/sync.js` and follow [SYNC.md](./SYNC.md).
