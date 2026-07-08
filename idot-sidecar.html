@@ -329,7 +329,9 @@
       <option value="tab">Mic + meeting tab</option>
       <option value="screen">Mic + computer audio</option>
     </select>
-    <button class="btn-ghost" id="exportBtn">Export</button>
+    <button class="btn-ghost" id="exportBtn">Copy Notes</button>
+    <button class="btn-ghost" id="exportJsonBtn">Export JSON</button>
+    <button class="btn-ghost" id="exportBriefBtn">AIO Brief</button>
     <button class="btn-ghost" id="settingsBtn">Settings</button>
     <button class="btn-primary" id="startBtn">Start Listening</button>
   </div>
@@ -429,12 +431,13 @@
     <div id="aioFields" style="display:none">
       <div class="field">
         <label>Server Base URL</label>
-        <input type="text" id="aioBaseUrl" placeholder="http://localhost:8000">
+        <input type="text" id="aioBaseUrl" placeholder="http://localhost:8000  or  https://integrate.api.nvidia.com/v1">
         <div class="hint">
-          Root URL of any OpenAI-compatible server — AIO Orchestrator, Ollama,
-          LiteLLM, vLLM, LM Studio. The app calls <code>{base}/v1/chat/completions</code>
-          directly from this browser, so the server must allow CORS from this page's origin.
-          Transcript text never leaves your own infrastructure.
+          Any OpenAI-compatible endpoint: NVIDIA NIM hosted
+          (<code>https://integrate.api.nvidia.com/v1</code> + free <code>nvapi-</code> key),
+          a self-hosted NIM container, Ollama, LiteLLM, vLLM, LM Studio. A trailing
+          <code>/v1</code> is handled either way. The server must allow CORS from this
+          page's origin. With a local server, transcript text never leaves your machine.
         </div>
       </div>
       <div class="field">
@@ -599,6 +602,14 @@
   const roomSpeakers = makeSpeakerRotation(['Speaker A', 'Speaker B', 'Speaker C', 'Speaker D']);
 
   const IDOT_COACHING_SYSTEM = `You are a real-time coaching assistant for IDOT (Illinois Department of Transportation) utility coordination meetings. Based on the recent discussion, provide ONE brief, actionable coaching tip (2-3 sentences max) about IDOT-specific processes, utility coordination requirements, letting timelines, right-of-way issues, or common meeting pitfalls. Only respond if there is something genuinely useful to add. If nothing specific is needed right now, respond with exactly: NO_COACHING_NEEDED`;
+
+  const EXTRACTION_SYSTEM = `You are an expert at analyzing IDOT (Illinois Department of Transportation) utility coordination meeting transcripts. Extract structured data. EVIDENCE-BASED ONLY: include nothing that is not stated in the transcript; use null for anything not mentioned. Respond with valid JSON only - no markdown, no commentary - using exactly this structure:
+{
+  "utilities": [{"owner":"string","facilityType":"string","conflict":"yes|potential|no","location":"string|null","status":"string|null","notes":"string|null"}],
+  "actionItems": [{"description":"string","assignee":"string|null","dueDate":"YYYY-MM-DD|null","priority":"high|medium|low"}],
+  "keyDecisions": [{"description":"string","madeBy":"string|null"}],
+  "risks": [{"description":"string","level":"high|medium|low","category":"schedule|cost|technical|legal|other","mitigation":"string|null"}]
+}`;
 
   // ─── Speech Recognition (live transcript, free, in-browser) ───────────
   function getRecognitionCtor() {
@@ -782,16 +793,30 @@
     requestCoaching();
   }
 
+  // One entry point for every AI call — coaching and end-of-meeting extraction
+  // both route through the configured provider.
+  async function getCompletion(systemPrompt, userText, maxTokens) {
+    const provider = getProvider();
+    return provider === 'm365' ? m365GetInsight(systemPrompt, userText, maxTokens)
+      : provider === 'anthropic' ? anthropicGetInsight(systemPrompt, userText, maxTokens)
+      : provider === 'aio' ? aioGetInsight(systemPrompt, userText, maxTokens)
+      : githubGetInsight(systemPrompt, userText, maxTokens);
+  }
+
+  function providerConfigured() {
+    const p = getProvider();
+    return p === 'm365' ? !!m365Token()
+      : p === 'anthropic' ? !!localStorage.getItem(LS.anthropicKey)
+      : p === 'aio' ? !!localStorage.getItem(LS.aioBaseUrl)
+      : !!getToken();
+  }
+
   async function requestCoaching() {
     const recentText = segments.slice(-12).map(s => `${s.speaker}: ${s.text}`).join('\n');
     if (!recentText.trim()) return;
 
     try {
-      const provider = getProvider();
-      const text = provider === 'm365' ? await m365GetInsight(recentText)
-        : provider === 'anthropic' ? await anthropicGetInsight(recentText)
-        : provider === 'aio' ? await aioGetInsight(recentText)
-        : await githubGetInsight(recentText);
+      const text = await getCompletion(IDOT_COACHING_SYSTEM, `Recent meeting discussion:\n\n${recentText}`, 180);
       if (text && text !== 'NO_COACHING_NEEDED') {
         addInsight(text);
       }
@@ -801,7 +826,7 @@
   }
 
   // ── Provider: GitHub Copilot ──
-  async function githubGetInsight(recentText) {
+  async function githubGetInsight(systemPrompt, userText, maxTokens) {
     const token = getToken();
     if (!token) return null; // silently skip if no key configured
 
@@ -815,10 +840,10 @@
       },
       body: JSON.stringify({
         model: getModel(),
-        max_tokens: 180,
+        max_tokens: maxTokens,
         messages: [
-          { role: 'system', content: IDOT_COACHING_SYSTEM },
-          { role: 'user', content: `Recent meeting discussion:\n\n${recentText}` },
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userText },
         ],
       }),
     });
@@ -839,7 +864,13 @@
   // org's own infrastructure.
   let aioWarned = false;
 
-  async function aioGetInsight(recentText) {
+  // Accept bases with or without a trailing /v1 — NVIDIA NIM's hosted endpoint
+  // is https://integrate.api.nvidia.com/v1, local servers usually bare host:port.
+  function aioApiUrl(base, path) {
+    return base.replace(/\/v1$/, '') + '/v1/' + path;
+  }
+
+  async function aioGetInsight(systemPrompt, userText, maxTokens) {
     const base = (localStorage.getItem(LS.aioBaseUrl) || '').replace(/\/+$/, '');
     if (!base) return null; // silently skip if no server configured
 
@@ -850,15 +881,15 @@
     let res;
     try {
       const payload = {
-        max_tokens: 200,
+        max_tokens: maxTokens,
         messages: [
-          { role: 'system', content: IDOT_COACHING_SYSTEM },
-          { role: 'user', content: `Recent meeting discussion:\n\n${recentText}` },
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userText },
         ],
       };
       const model = localStorage.getItem(LS.aioModel) || '';
       if (model) payload.model = model; // omitted → the server's default model
-      res = await fetch(`${base}/v1/chat/completions`, {
+      res = await fetch(aioApiUrl(base, 'chat/completions'), {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
@@ -893,7 +924,7 @@
 
     const key = document.getElementById('aioKey').value.trim() || localStorage.getItem(LS.aioKey) || '';
     try {
-      const res = await fetch(`${base}/v1/models`, {
+      const res = await fetch(aioApiUrl(base, 'models'), {
         headers: key ? { 'Authorization': `Bearer ${key}` } : {},
       });
       if (!res.ok) return;
@@ -906,7 +937,7 @@
   }
 
   // ── Provider: Claude (Anthropic Messages API, direct from browser) ──
-  async function anthropicGetInsight(recentText) {
+  async function anthropicGetInsight(systemPrompt, userText, maxTokens) {
     const key = localStorage.getItem(LS.anthropicKey) || '';
     if (!key) return null; // silently skip if no key configured
 
@@ -920,9 +951,9 @@
       },
       body: JSON.stringify({
         model: localStorage.getItem(LS.anthropicModel) || 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
-        system: IDOT_COACHING_SYSTEM,
-        messages: [{ role: 'user', content: `Recent meeting discussion:\n\n${recentText}` }],
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userText }],
       }),
     });
 
@@ -952,7 +983,7 @@
     return m365.accessToken && Date.now() < m365.expiresAt - 60_000 ? m365.accessToken : null;
   }
 
-  async function m365GetInsight(recentText) {
+  async function m365GetInsight(systemPrompt, userText, maxTokens) {
     const token = m365Token();
     if (!token) {
       if (!m365.warned) {
@@ -976,7 +1007,7 @@
       method: 'POST',
       headers: graphHeaders,
       body: JSON.stringify({
-        message: { text: `${IDOT_COACHING_SYSTEM}\n\nRecent meeting discussion:\n\n${recentText}` },
+        message: { text: `${systemPrompt}\n\n${userText}` },
         contextualResources: { webContext: { isWebEnabled: false } },
       }),
     });
@@ -1260,6 +1291,155 @@
     });
   }
 
+  // ─── Structured export (.meeting.json + AIO brief) ─────────────────────
+  // Evidence-based, provenance-carrying output — designed so a coordinator
+  // can drop the file into a watched inbox (iUTIEMS/iCURIS-style ingestion)
+  // or feed the brief to `aio run --brief`.
+
+  function collectInsights() {
+    return [...document.querySelectorAll('.insight-card')].map(el => {
+      const time = el.querySelector('.time').textContent;
+      return { time, text: el.textContent.replace(time, '').replace('×', '').trim() };
+    });
+  }
+
+  async function extractStructuredData() {
+    const transcriptText = segments.map(s => `${s.speaker}: ${s.text}`).join('\n');
+    const raw = await getCompletion(EXTRACTION_SYSTEM, `TRANSCRIPT:\n\n${transcriptText}`, 2000);
+    if (!raw) return null;
+    try { return JSON.parse(raw); }
+    catch {
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) { try { return JSON.parse(m[0]); } catch { /* fall through */ } }
+      console.error('Failed to parse extraction response:', raw.slice(0, 200));
+      return null;
+    }
+  }
+
+  function downloadFile(name, text, mime) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function meetingMeta() {
+    const title = document.getElementById('meetingTitle').value.trim() || 'Untitled meeting';
+    const startTs = meetingStartTime || (segments[0] && segments[0].ts) || Date.now();
+    const dateIso = new Date(startTs).toISOString();
+    return {
+      title,
+      dateIso,
+      fileStem: `IDOT-Sidecar_${title.replace(/[^\w-]+/g, '-')}_${dateIso.slice(0, 10)}`,
+      sourceKey: `${title}_${dateIso.slice(0, 10)}`,
+    };
+  }
+
+  async function runExtractionWithButton(btn) {
+    if (!providerConfigured()) return null;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Extracting…';
+    try { return await extractStructuredData(); }
+    catch (err) { console.error('Extraction failed:', err); return null; }
+    finally { btn.disabled = false; btn.textContent = original; }
+  }
+
+  async function exportJson() {
+    if (!segments.length) { toast('Nothing to export yet.'); return; }
+    const meta = meetingMeta();
+    const extracted = await runExtractionWithButton(document.getElementById('exportJsonBtn'));
+    if (providerConfigured() && !extracted) toast('AI extraction failed — exporting transcript only.');
+
+    const doc = {
+      exportVersion: 1,
+      source: 'IDOT Sidecar',
+      meeting: {
+        title: meta.title,
+        date: meta.dateIso,
+        durationSeconds: Math.round((segments[segments.length - 1].ts - (meetingStartTime || segments[0].ts)) / 1000),
+        wordCount: segments.reduce((n, s) => n + s.text.split(/\s+/).filter(Boolean).length, 0),
+        captureMode: document.getElementById('sourceSelect').value,
+      },
+      provenance: {
+        METHOD: extracted ? 'live-transcription+ai-extraction' : 'live-transcription',
+        SOURCE: meta.sourceKey,
+        DATE_COLLECTED: new Date().toISOString(),
+        aiProvider: extracted ? getProvider() : null,
+        evidenceNote: 'Extracted only from statements in the attached transcript',
+      },
+      utilities: extracted?.utilities ?? null,
+      actionItems: extracted?.actionItems ?? null,
+      keyDecisions: extracted?.keyDecisions ?? null,
+      risks: extracted?.risks ?? null,
+      insights: collectInsights(),
+      transcript: segments.map(s => ({ speaker: s.speaker, text: s.text, timestamp: new Date(s.ts).toISOString() })),
+    };
+
+    downloadFile(`${meta.fileStem}.meeting.json`, JSON.stringify(doc, null, 2), 'application/json');
+    toast(extracted ? 'Structured meeting JSON downloaded.' : 'Transcript JSON downloaded (no AI extraction).');
+  }
+
+  // Render meeting outcomes as a brief.md consumable by `aio run --brief` —
+  // the follow-up work becomes an orchestratable AIO run.
+  async function exportBrief() {
+    if (!segments.length) { toast('Nothing to export yet.'); return; }
+    if (!providerConfigured()) {
+      toast('The AIO brief needs AI extraction — configure a provider in Settings first.');
+      return;
+    }
+    const meta = meetingMeta();
+    const x = await runExtractionWithButton(document.getElementById('exportBriefBtn'));
+    if (!x) { toast('AI extraction failed — cannot build the brief.'); return; }
+
+    const lines = [];
+    lines.push(`# Meeting Follow-up Brief — ${meta.title}`);
+    lines.push('');
+    lines.push(`Generated by IDOT Sidecar from the ${meta.dateIso.slice(0, 10)} utility coordination meeting.`);
+    lines.push(`Evidence-based: everything below traces to statements in the meeting transcript (SOURCE: ${meta.sourceKey}).`);
+    lines.push('');
+    lines.push('## Mission');
+    lines.push('');
+    lines.push(`Complete the follow-up actions recorded in the "${meta.title}" utility coordination meeting.`);
+    lines.push('');
+    if (x.keyDecisions?.length) {
+      lines.push('## Context — decisions already made');
+      lines.push('');
+      x.keyDecisions.forEach(d => lines.push(`- ${d.description}${d.madeBy ? ` (decided by ${d.madeBy})` : ''}`));
+      lines.push('');
+    }
+    if (x.utilities?.length) {
+      lines.push('## Context — utility conflicts in play');
+      lines.push('');
+      x.utilities.forEach(u => lines.push(`- ${u.owner} (${u.facilityType}) — conflict: ${u.conflict}${u.location ? ` at ${u.location}` : ''}${u.status ? `; status: ${u.status}` : ''}`));
+      lines.push('');
+    }
+    lines.push('## Acceptance criteria');
+    lines.push('');
+    if (x.actionItems?.length) {
+      x.actionItems.forEach((a, i) => lines.push(`- AC${i + 1}: ${a.description}${a.assignee ? ` (owner: ${a.assignee})` : ''}${a.dueDate ? ` — due ${a.dueDate}` : ''} [priority: ${a.priority}]`));
+    } else {
+      lines.push('- AC1: no action items were recorded in this meeting.');
+    }
+    lines.push('');
+    if (x.risks?.length) {
+      lines.push('## Constraints — risks to respect');
+      lines.push('');
+      x.risks.forEach(r => lines.push(`- [${r.level}/${r.category}] ${r.description}${r.mitigation ? ` — mitigation: ${r.mitigation}` : ''}`));
+      lines.push('');
+    }
+    lines.push('## Non-goals');
+    lines.push('');
+    lines.push('- Nothing beyond the actions and decisions recorded in this meeting.');
+    lines.push('');
+
+    downloadFile(`${meta.fileStem}.brief.md`, lines.join('\n'), 'text/markdown');
+    toast('AIO brief downloaded — run it with: aio run --brief <file>');
+  }
+
   // ─── History rendering ──────────────────────────────────────────────
   function renderHistory() {
     const list = document.getElementById('historyList');
@@ -1307,6 +1487,8 @@
     running ? stopListening() : startListening();
   });
   document.getElementById('exportBtn').addEventListener('click', exportMeeting);
+  document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
+  document.getElementById('exportBriefBtn').addEventListener('click', exportBrief);
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
   document.getElementById('providerSelect').addEventListener('change', () => {
@@ -1343,11 +1525,7 @@
   } else {
     loadSettings();
     renderHistory();
-    const provider = getProvider();
-    const configured = provider === 'm365' ? !!m365Token()
-      : provider === 'anthropic' ? !!localStorage.getItem(LS.anthropicKey)
-      : provider === 'aio' ? !!localStorage.getItem(LS.aioBaseUrl)
-      : !!getToken();
+    const configured = providerConfigured();
     if (!configured) {
       setTimeout(() => toast('Tip: open Settings to configure your AI provider for live coaching.'), 800);
     }

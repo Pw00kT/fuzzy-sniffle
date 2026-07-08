@@ -11,7 +11,7 @@ Built for coordinators on locked-down government machines: no Node.js, no Docker
 3. Click **Settings** and configure your AI provider (see below), then save
 4. Pick the audio mode that matches your meeting (see the matrix below), click **Start Listening**, and grant permissions when prompted
 5. The transcript fills in live on the right; coaching tips appear on the left every ~30 seconds
-6. Click **Export** any time to copy the transcript + insights to your clipboard
+6. Export any time — **Copy Notes** (clipboard summary), **Export JSON** (structured data), or **AIO Brief** (an orchestratable follow-up brief)
 
 Live transcription works with zero configuration — AI coaching activates once a provider is configured.
 
@@ -52,14 +52,27 @@ Then enter the Tenant ID and Client ID in Settings and click **Sign in to Micros
 ### Claude (Anthropic)
 Paste an API key from [console.anthropic.com](https://console.anthropic.com/settings/keys) and pick a model — Haiku (fast, the default, well-suited to short frequent coaching turns), Sonnet, or Opus. Like the GitHub option it works even when the file is opened straight from disk; the key is stored only in this browser's `localStorage` and sent only to Anthropic's API (using Anthropic's direct-browser-access support for bring-your-own-key apps).
 
-### Self-hosted / Open source (AIO)
-Point the app at your own AI server — [AIO Orchestrator](https://github.com/Pw00kT/aio-orchestrator) or any other OpenAI-compatible server (NVIDIA NIM, Ollama, LiteLLM, vLLM, LM Studio). This is the **zero-account** option: for a keyless orchestrator, the only thing a coordinator enters is the **Base URL** — no login, no API key, no model name required. The key field is only for servers that demand one, the model field is optional (blank uses the server's default) and autocompletes from the server's `/v1/models` list, and the app calls `{base}/v1/chat/completions`.
+### Self-hosted / Open source
+Point the app at any OpenAI-compatible endpoint:
 
-It's also the maximum-sovereignty option: **transcript text never leaves your own infrastructure**. NVIDIA NIM containers expose this same OpenAI-compatible API (port 8000, no auth) — so an AIO Orchestrator fronting NIM and open-source models gives coordinators AI coaching with no accounts anywhere. If the orchestrator itself calls NVIDIA's hosted endpoints, that credential lives server-side in the orchestrator, never in the browser.
+- **NVIDIA NIM hosted** — `https://integrate.api.nvidia.com/v1` with a free `nvapi-` key from build.nvidia.com (free credits, open-weight models: Nemotron, DeepSeek, GLM, Kimi, Qwen, Llama)
+- **Self-hosted NIM container / Ollama / LiteLLM / vLLM / LM Studio** — usually keyless; with a local server, **transcript text never leaves your machine**
+
+Only the **Base URL** is required (a trailing `/v1` is handled either way). The key field is only for servers that demand one; the model field is optional (blank uses the server's default) and autocompletes from the server's `/v1/models` list. The server must allow CORS from this page's origin.
+
+**Relationship to [AIO Orchestrator](https://github.com/Pw00kT/aio-orchestrator):** AIO is a local-first CLI orchestration system, not an HTTP gateway — you don't point Sidecar *at* it. Instead, they pair in two ways: (1) point Sidecar at the same NIM endpoints AIO's cheap tiers use, and (2) use Sidecar's **AIO Brief** export (below) to turn meeting outcomes into a `brief.md` that `aio run --brief` can orchestrate.
 
 Two networking notes:
 - **CORS** — the page calls the server directly from the browser, so the server must allow this page's origin (Ollama: set `OLLAMA_ORIGINS`; LiteLLM/vLLM have CORS flags; most gateways have an equivalent setting).
 - **Mixed content** — browsers treat `http://localhost` as secure, so a local server works even when this page is served over https (e.g. from SharePoint). A *remote* plain-`http://` server will be blocked by the browser — serve it over https or run it locally.
+
+## Exports
+
+Three ways out, all client-side:
+
+- **Copy Notes** — human-readable transcript + coaching insights to the clipboard (paste into email or a doc)
+- **Export JSON** — downloads `<title>.meeting.json`: an end-of-meeting AI extraction pass (utilities discussed, action items, key decisions, risks — *evidence-based only*, nothing not stated in the transcript) plus the full transcript and insights, wrapped in provenance fields (`SOURCE`, `METHOD`, `DATE_COLLECTED`). Designed to be dropped into a watched-inbox ingest (iUTIEMS/iCURIS-style); re-exporting the same meeting produces the same `SOURCE` key so ingestion can dedup. Works without an AI provider too — extraction fields are `null`, transcript still exports.
+- **AIO Brief** — downloads `<title>.brief.md`: meeting outcomes rendered as a Mission / Context / Acceptance criteria / Constraints / Non-goals brief, directly consumable by [AIO Orchestrator](https://github.com/Pw00kT/aio-orchestrator)'s `aio run --brief`. The follow-up work from a meeting becomes an orchestratable run. Requires an AI provider.
 
 ## Other settings
 
