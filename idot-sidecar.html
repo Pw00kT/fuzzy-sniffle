@@ -3,27 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IDOT Sidecar — Live Meeting Assistant</title>
+<title>IDOT Sidecar, Live Meeting Assistant</title>
 <style>
   /* ═══ Design tokens ═════════════════════════════════════════
      Layered navy surfaces, IDOT-inspired blue, safety-orange for
      live states. Same custom-property names as v1 so nothing else
      needs to know the palette changed. */
+  /* Anchored to the IDOT Design System tokens (Pantone-anchored brand):
+     Navy #002341 (541 C), Orange #F58220 (144 C), supporting Cyan/Yellow/
+     Green/Red-Orange, ink scale for dark surfaces. No invented hues. */
   :root {
-    --bg: #0a101d;
-    --panel: #101a2c;
-    --panel-light: #182439;
-    --border: #22304a;
-    --border-strong: #2e3f5e;
-    --text: #e7edf6;
-    --text-dim: #8fa0b8;
-    --accent: #4f8ef7;
-    --accent-dim: #1d4ed8;
-    --accent-soft: rgba(79, 142, 247, 0.13);
-    --green: #34d399;
-    --amber: #fbbf24;
-    --orange: #f97316;
-    --red: #ef4444;
+    --bg: #000913;            /* ink-950 */
+    --panel: #00121f;         /* ink-900 */
+    --panel-light: #001a30;   /* ink-800 */
+    --border: #0d3050;        /* ink-600 */
+    --border-strong: #1a3d5c; /* ink-500 */
+    --text: #e6ecf3;          /* ink-50 */
+    --text-dim: #9bb1cc;      /* ink-200 */
+    --accent: #00AEEF;        /* IDOT Cyan, Process Cyan C */
+    --accent-dim: #3a6593;    /* ink-400 */
+    --accent-soft: rgba(0, 174, 239, 0.11);
+    --green: #97C93D;         /* IDOT Green, 2292 C */
+    --amber: #FCB116;         /* IDOT Yellow, 124 C */
+    --orange: #F58220;        /* IDOT Orange, 144 C */
+    --red: #F05623;           /* IDOT Red-Orange, 7579 C */
     --radius-s: 7px;
     --radius-m: 10px;
     --radius-l: 14px;
@@ -36,7 +39,7 @@
   body {
     font-family: var(--font);
     background:
-      radial-gradient(1100px 500px at 85% -10%, rgba(79, 142, 247, 0.07), transparent 60%),
+      radial-gradient(1100px 500px at 85% -10%, rgba(0, 174, 239, 0.05), transparent 60%),
       var(--bg);
     color: var(--text);
     height: 100vh;
@@ -45,7 +48,7 @@
     flex-direction: column;
     -webkit-font-smoothing: antialiased;
   }
-  ::selection { background: rgba(79, 142, 247, 0.35); }
+  ::selection { background: rgba(0, 174, 239, 0.3); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
   /* ═══ Header / brand ════════════════════════════════════════ */
@@ -65,8 +68,9 @@
     width: 34px; height: 34px; flex-shrink: 0;
     display: grid; place-items: center;
     border-radius: 9px;
-    background: linear-gradient(145deg, var(--accent-dim), #163a8f);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), var(--shadow-1);
+    background: linear-gradient(145deg, #002341, #001a30);
+    border: 1px solid var(--border-strong);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), var(--shadow-1);
   }
   .brand-mark svg { display: block; }
   header h1 {
@@ -95,13 +99,13 @@
   }
   header h1 .dot.live {
     background: var(--orange);
-    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.55);
+    box-shadow: 0 0 0 0 rgba(245, 130, 32, 0.55);
     animation: livePulse 1.6s infinite;
   }
   @keyframes livePulse {
-    0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.55); }
-    70% { box-shadow: 0 0 0 8px rgba(249, 115, 22, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+    0% { box-shadow: 0 0 0 0 rgba(245, 130, 32, 0.55); }
+    70% { box-shadow: 0 0 0 8px rgba(245, 130, 32, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 130, 32, 0); }
   }
   header .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
@@ -120,19 +124,19 @@
   button:active { transform: translateY(1px); }
   button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   .btn-primary {
-    background: linear-gradient(180deg, #5a96f8, var(--accent-dim));
+    background: linear-gradient(180deg, #3a6593, #1a3d5c);
     border-color: rgba(255, 255, 255, 0.12);
     color: #fff;
-    box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255, 255, 255, 0.16);
   }
-  .btn-primary:hover { background: linear-gradient(180deg, #6ba3ff, #2558e0); }
+  .btn-primary:hover { background: linear-gradient(180deg, #6a8bb3, #3a6593); }
   .btn-danger {
-    background: linear-gradient(180deg, #f26060, #d92d2d);
+    background: var(--red);
     border-color: rgba(255, 255, 255, 0.1);
     color: #fff;
     box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
-  .btn-danger:hover { background: linear-gradient(180deg, #ff7373, #e63b3b); }
+  .btn-danger:hover { filter: brightness(1.08); }
   .btn-ghost {
     background: var(--panel-light);
     border-color: var(--border);
@@ -199,6 +203,15 @@
     align-items: center;
     gap: 6px;
   }
+  .disclaimer {
+    font-size: 10.5px;
+    line-height: 1.55;
+    color: var(--text-dim);
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border);
+  }
+  .btn-small { padding: 3px 9px; font-size: 10px; letter-spacing: 0.05em; border-radius: 6px; text-transform: none; }
 
   .insights-header {
     padding: 14px 16px 8px;
@@ -212,7 +225,7 @@
     align-items: center;
     gap: 7px;
   }
-  .insights-header::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .insights-header .line { flex: 1; height: 1px; background: var(--border); }
   .insights-list {
     flex: 1;
     overflow-y: auto;
@@ -325,16 +338,16 @@
     font-size: 10.5px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #8ab4ff;
+    color: var(--accent);
     background: var(--accent-soft);
-    border: 1px solid rgba(79, 142, 247, 0.25);
+    border: 1px solid rgba(0, 174, 239, 0.3);
     padding: 1px 8px 2px;
     border-radius: 999px;
   }
   .segment .speaker.remote {
-    color: #6ee7c8;
-    background: rgba(52, 211, 153, 0.1);
-    border-color: rgba(52, 211, 153, 0.25);
+    color: var(--green);
+    background: rgba(151, 201, 61, 0.1);
+    border-color: rgba(151, 201, 61, 0.3);
   }
   .segment .text { font-size: 14px; line-height: 1.65; color: var(--text); }
   .segment.interim { opacity: 0.75; }
@@ -404,7 +417,7 @@
   .field input:focus, .field select:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(79, 142, 247, 0.18);
+    box-shadow: 0 0 0 3px rgba(0, 174, 239, 0.15);
   }
   .field .hint { font-size: 11px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
   .field .hint a { color: var(--accent); text-decoration: none; }
@@ -492,8 +505,8 @@
     .transcript-body { overflow: visible; padding: 16px 0; }
     .segment .text { color: #111; }
     .segment .meta { color: #555; }
-    .segment .speaker { color: #1d4ed8; background: none; border-color: #99b3e8; }
-    .segment .speaker.remote { color: #067a5b; border-color: #9ad8c5; }
+    .segment .speaker { color: #002341; background: none; border-color: #9bb1cc; }
+    .segment .speaker.remote { color: #002341; border-color: #97C93D; }
     .segment.interim { display: none; }
   }
 </style>
@@ -504,9 +517,9 @@
   <div class="brand">
     <div class="brand-mark" aria-hidden="true">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M7.5 21 L10.5 3" stroke="white" stroke-width="2" stroke-linecap="round"/>
-        <path d="M16.5 21 L13.5 3" stroke="white" stroke-width="2" stroke-linecap="round"/>
-        <path d="M12 4.5 v2.6 M12 11 v2.6 M12 17.5 v2.6" stroke="rgba(255,255,255,0.85)" stroke-width="1.7" stroke-linecap="round"/>
+        <path d="M7.5 21 L10.5 3" stroke="#F58220" stroke-width="2" stroke-linecap="round"/>
+        <path d="M16.5 21 L13.5 3" stroke="#F58220" stroke-width="2" stroke-linecap="round"/>
+        <path d="M12 4.5 v2.6 M12 11 v2.6 M12 17.5 v2.6" stroke="rgba(255,255,255,0.9)" stroke-width="1.7" stroke-linecap="round"/>
       </svg>
     </div>
     <h1>
@@ -519,14 +532,14 @@
   </div>
   <div class="actions">
     <select class="source-select" id="sourceSelect" title="What to transcribe">
-      <option value="headset">Headset — just me</option>
+      <option value="headset">Headset, just me</option>
       <option value="room">Room / speakerphone</option>
       <option value="tab">Mic + meeting tab</option>
       <option value="screen">Mic + computer audio</option>
     </select>
     <button class="btn-ghost" id="exportBtn">Copy Notes</button>
     <button class="btn-ghost" id="exportJsonBtn">Export JSON</button>
-    <button class="btn-ghost" id="exportBriefBtn">AIO Brief</button>
+    <button class="btn-ghost" id="exportBriefBtn">Follow-up brief</button>
     <button class="btn-ghost" id="settingsBtn">Settings</button>
     <button class="btn-primary" id="startBtn">Start Listening</button>
   </div>
@@ -535,22 +548,29 @@
 <main>
   <div class="col-left">
     <div class="control-block">
-      <div class="status-line" id="statusLine">Idle — click Start Listening</div>
+      <div class="status-line" id="statusLine">Idle: click Start Listening</div>
       <div class="mic-level"><div class="mic-level-fill" id="micLevelFill"></div></div>
+      <div class="disclaimer">Not official minutes. AI coaching is suggestion only. Evidence-based; draft, not a record of decision.</div>
     </div>
-    <div class="insights-header">Live Coaching</div>
+    <div class="insights-header"><span>Live Coaching</span><span class="line"></span><button class="btn-ghost btn-small" id="suggestTipBtn" type="button">Suggest a tip</button></div>
     <div class="insights-list" id="insightsList">
-      <div class="insight-empty">Insights will appear here once the meeting starts and enough context has been captured.</div>
+      <div class="insight-empty">Coaching tips appear here once the meeting is running and enough has been said. They are prompts for the coordinator, not determinations.</div>
     </div>
   </div>
 
   <div class="col-right">
     <div class="transcript-header">
-      <input id="meetingTitle" placeholder="Untitled meeting — click to name it" value="">
+      <input id="meetingTitle" placeholder="Untitled meeting: click to name it" value="">
       <span style="font-size:12px;color:var(--text-dim)" id="wordCount">0 words</span>
     </div>
     <div class="transcript-body" id="transcriptBody">
-      <div class="transcript-empty">Live transcript will appear here.<br>Click "Start Listening" to begin.</div>
+      <div class="transcript-empty">
+        Live transcript will appear here.<br>
+        Click "Start Listening" to transcribe in the browser (Chrome or Edge), or load a
+        sample coordination meeting to see the full pipeline: transcript, coaching,
+        extraction and exports.<br><br>
+        <button class="btn-ghost" id="loadSampleBtn" type="button">Load sample meeting</button>
+      </div>
     </div>
   </div>
 </main>
@@ -562,6 +582,7 @@
     <div class="field">
       <label>AI provider</label>
       <select id="providerSelect">
+        <option value="builtin" hidden>Built-in assistant (no key, this workspace)</option>
         <option value="github">GitHub Copilot</option>
         <option value="m365">Microsoft 365 Copilot</option>
         <option value="anthropic">Claude (Anthropic)</option>
@@ -576,7 +597,7 @@
         <input type="password" id="ghToken" placeholder="ghp_...">
         <div class="hint">
           Personal Access Token for a GitHub account with Copilot enabled.
-          Create one at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a> — no special scopes required.
+          Create one at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a>: no special scopes required.
           Stored only in this browser's local storage; never sent anywhere but GitHub's API.
         </div>
       </div>
@@ -704,6 +725,10 @@
   // impossible when the file is opened directly from disk.
   const M365_AVAILABLE = location.protocol === 'https:';
 
+  // Built-in assistant: present when this page is hosted inside a workspace
+  // that injects window.claude (e.g. a claude.ai artifact). No key needed.
+  const builtinAvailable = () => !!(window.claude && typeof window.claude.complete === 'function');
+
   function applyProviderVisibility() {
     const provider = document.getElementById('providerSelect').value;
     document.getElementById('githubFields').style.display = provider === 'github' ? '' : 'none';
@@ -712,8 +737,10 @@
     document.getElementById('aioFields').style.display = provider === 'aio' ? '' : 'none';
     // The "Coaching model" select holds GPT names — only meaningful for GitHub
     document.getElementById('modelSelect').closest('.field').style.display = provider === 'github' ? '' : 'none';
-    document.getElementById('providerHint').textContent = M365_AVAILABLE ? '' :
-      'Microsoft 365 Copilot requires this file to be hosted over https (e.g. on SharePoint) — ask IT. GitHub Copilot and Claude work from anywhere.';
+    document.getElementById('providerHint').textContent = provider === 'builtin'
+      ? 'Uses the assistant built into this workspace. No key required.'
+      : M365_AVAILABLE ? '' :
+        'Microsoft 365 Copilot requires this file to be hosted over https (for example on SharePoint), ask IT. GitHub Copilot and Claude work from anywhere.';
   }
 
   function loadSettings() {
@@ -731,6 +758,9 @@
     if (!M365_AVAILABLE) {
       document.querySelector('#providerSelect option[value="m365"]').disabled = true;
     }
+    if (builtinAvailable()) {
+      document.querySelector('#providerSelect option[value="builtin"]').hidden = false;
+    }
     applyProviderVisibility();
     updateM365Status();
   }
@@ -739,8 +769,10 @@
   function getModel() { return localStorage.getItem(LS.model) || 'gpt-4o'; }
   function getInterval() { return parseInt(localStorage.getItem(LS.interval) || '30000', 10); }
   function getProvider() {
-    const p = localStorage.getItem(LS.provider) || 'github';
-    return p === 'm365' && !M365_AVAILABLE ? 'github' : p;
+    const p = localStorage.getItem(LS.provider) || (builtinAvailable() ? 'builtin' : 'github');
+    if (p === 'm365' && !M365_AVAILABLE) return 'github';
+    if (p === 'builtin' && !builtinAvailable()) return 'github';
+    return p;
   }
 
   function getHistory() {
@@ -796,14 +828,28 @@
   const remoteSpeakers = makeSpeakerRotation(['Remote A', 'Remote B', 'Remote C', 'Remote D']);
   const roomSpeakers = makeSpeakerRotation(['Speaker A', 'Speaker B', 'Speaker C', 'Speaker D']);
 
-  const IDOT_COACHING_SYSTEM = `You are a real-time coaching assistant for IDOT (Illinois Department of Transportation) utility coordination meetings. Based on the recent discussion, provide ONE brief, actionable coaching tip (2-3 sentences max) about IDOT-specific processes, utility coordination requirements, letting timelines, right-of-way issues, or common meeting pitfalls. Only respond if there is something genuinely useful to add. If nothing specific is needed right now, respond with exactly: NO_COACHING_NEEDED`;
+  const IDOT_COACHING_SYSTEM = `You are the live coaching assistant for IDOT District 1 utility coordination meetings, operating inside the D1 Utility Operations Framework. Based on the recent discussion, offer ONE brief tip (2 to 3 sentences) for the coordinator. You suggest and flag; you never direct, authorize, approve or commit. Coordination is not authorization. Where it genuinely fits, name the framework instrument: SOP 01 (unknown facility intake), SOP 02 (utility nonresponse escalation), SOP 03 (SUE request and incorporation), SOP 04 (letting-readiness review), SOP 05 (record conflict resolution), SOP 06 (construction-stage field conflict), SOP 07 (permit deficiency), SOP 08 (permit lifecycle), SOP 09 (relocation sequence), the 605 ILCS 5/9-113 relocation letter chain, OPER 613, OPER 1122, or a SUE quality level. Confidence discipline: records, atlases, GIS, as-builts and utility responses are not verified subsurface condition; only a documented test hole, exposure, survey or authorized confirmation is. House style: no em dashes, no emoji, capitalize "the Department". If nothing genuinely useful applies right now, respond with exactly: NO_COACHING_NEEDED`;
 
-  const EXTRACTION_SYSTEM = `You are an expert at analyzing IDOT (Illinois Department of Transportation) utility coordination meeting transcripts. Extract structured data. EVIDENCE-BASED ONLY: include nothing that is not stated in the transcript; use null for anything not mentioned. Respond with valid JSON only - no markdown, no commentary - using exactly this structure:
+  const AUTHORITY_BOUNDARY = 'Coordination only; no ROW, permit, contract, funding, schedule or waiver.';
+
+  const EXTRACTION_SYSTEM = `You analyze IDOT District 1 utility coordination meeting transcripts inside the D1 Utility Operations Framework. Extract draft Issue Cards plus meeting-level items. EVIDENCE-BASED ONLY: include nothing not stated in the transcript; use null for anything not mentioned. Confidence discipline: statements made in a meeting are at best Known or Assumed; never output Verified. Set risk_color honestly: use Gray when the state is unknown, assumed or disputed; never hide uncertainty inside Yellow or Green. House style: no em dashes. Respond with valid JSON only, no markdown, using exactly this structure:
 {
-  "utilities": [{"owner":"string","facilityType":"string","conflict":"yes|potential|no","location":"string|null","status":"string|null","notes":"string|null"}],
+  "issueCards": [{
+    "title": "one-line issue statement",
+    "owner_stakeholder": "string|null",
+    "location": "string|null",
+    "primary_module": "GOAD|MTUC|PWS|ROI|SI|CWDM|IQPC|SM|EWRT|IMLL|DPDD|ET|SC|UFR",
+    "cluster": "Prime|Records|Subsurface|Conflict|Stakeholder|Governance",
+    "status": "New-Intake|Records-Pending|Owner-Response-Pending|Verification-Pending|Conflict-Confirmed|Permit-Review-Pending|Construction-Coordination-Pending|Ready-For-Milestone|Closed|Deferred|Disputed",
+    "risk_color": "Red|Yellow|Green|Gray",
+    "claims": [{"statement":"string","confidence":"Known|Assumed|Unknown|Disputed","source":"speaker label"}],
+    "requested_action": "string|null",
+    "responsible_party": "string|null",
+    "due_date": "YYYY-MM-DD|null",
+    "escalation_triggers": ["string"]
+  }],
   "actionItems": [{"description":"string","assignee":"string|null","dueDate":"YYYY-MM-DD|null","priority":"high|medium|low"}],
-  "keyDecisions": [{"description":"string","madeBy":"string|null"}],
-  "risks": [{"description":"string","level":"high|medium|low","category":"schedule|cost|technical|legal|other","mitigation":"string|null"}]
+  "keyDecisions": [{"description":"string","madeBy":"string|null"}]
 }`;
 
   // ─── Speech Recognition (live transcript, free, in-browser) ───────────
@@ -992,7 +1038,8 @@
   // both route through the configured provider.
   async function getCompletion(systemPrompt, userText, maxTokens) {
     const provider = getProvider();
-    return provider === 'm365' ? m365GetInsight(systemPrompt, userText, maxTokens)
+    return provider === 'builtin' ? builtinGetInsight(systemPrompt, userText)
+      : provider === 'm365' ? m365GetInsight(systemPrompt, userText, maxTokens)
       : provider === 'anthropic' ? anthropicGetInsight(systemPrompt, userText, maxTokens)
       : provider === 'aio' ? aioGetInsight(systemPrompt, userText, maxTokens)
       : githubGetInsight(systemPrompt, userText, maxTokens);
@@ -1000,10 +1047,17 @@
 
   function providerConfigured() {
     const p = getProvider();
-    return p === 'm365' ? !!m365Token()
+    return p === 'builtin' ? builtinAvailable()
+      : p === 'm365' ? !!m365Token()
       : p === 'anthropic' ? !!localStorage.getItem(LS.anthropicKey)
       : p === 'aio' ? !!localStorage.getItem(LS.aioBaseUrl)
       : !!getToken();
+  }
+
+  // ── Provider: built-in workspace assistant (no key) ──
+  async function builtinGetInsight(systemPrompt, userText) {
+    const reply = await window.claude.complete(`${systemPrompt}\n\n${userText}`);
+    return (reply || '').trim() || null;
   }
 
   async function requestCoaching() {
@@ -1092,7 +1146,7 @@
     } catch (err) {
       if (!aioWarned) {
         aioWarned = true;
-        toast("Can't reach the self-hosted AI server — check the Base URL, that it's running, and that CORS is enabled.");
+        toast("Can't reach the self-hosted AI server. Check the Base URL, that it's running, and that CORS is enabled.");
       }
       console.error('Self-hosted AI request error:', err);
       return null;
@@ -1218,10 +1272,10 @@
   function m365Fail(res) {
     if (res.status === 401) {
       m365.accessToken = null;
-      toast('Microsoft 365 session expired — sign in again in Settings.');
+      toast('Microsoft 365 session expired. Sign in again in Settings.');
       updateM365Status();
     } else if (res.status === 403) {
-      toast('Microsoft 365 Copilot access denied — check your Copilot license and app permissions.');
+      toast('Microsoft 365 Copilot access denied. Check your Copilot license and app permissions.');
     }
     console.error('M365 Copilot request failed:', res.status);
     res.text().then(t => console.error(t)).catch(() => {});
@@ -1304,7 +1358,7 @@
 
   function updateM365Status() {
     const el = document.getElementById('m365Status');
-    if (el) el.textContent = m365Token() ? 'Signed in ✓' : 'Not signed in';
+    if (el) el.textContent = m365Token() ? 'Signed in' : 'Not signed in';
   }
 
   window.addEventListener('message', (e) => {
@@ -1333,6 +1387,34 @@
     list.prepend(card);
   }
 
+  // ─── Sample meeting (demo the full pipeline with no microphone) ──────
+  const SAMPLE_MEETING = [
+    ['You', 'mic', 'Good morning, this is the utility coordination meeting for the IL-64 resurfacing, contract 62B45, letting targeted for November.'],
+    ['Remote A', 'tab', 'Ameren here. Our atlas shows a 12 inch gas main on the north side, but that record dates to 1987 and we have not verified depth.'],
+    ['You', 'mic', 'Noted. The storm sewer profile at station 45 plus 50 would cross that main. Until we get verification I am treating depth as assumed, not verified.'],
+    ['Remote B', 'tab', 'ComEd. We have three poles in the widening footprint. We cannot set the new poles until the fiber licensees transfer, and AT&T has not answered our last two notices.'],
+    ['You', 'mic', 'That sounds like a nonresponse escalation. I will send the follow-up notice and log the dates. If there is no answer in two weeks it goes up the chain.'],
+    ['Remote A', 'tab', 'If the gas main does conflict, relocation design takes six weeks and construction another eight, weather permitting.'],
+    ['You', 'mic', 'That puts us tight against the letting. I would like a test hole at the crossing to settle depth, and I will request SUE quality level A at that location.'],
+    ['Remote B', 'tab', 'One more: the joint use pole at Main and Fifth also carries a city fire alarm circuit. The city has to move first, then AT&T, then us.'],
+    ['You', 'mic', 'So the pole chain is city, then AT&T, then ComEd, and letting readiness depends on the whole chain. I will map that dependency and flag it.'],
+    ['Remote A', 'tab', 'Send us the sewer profile sheets and we will confirm conflict or clearance within ten business days.'],
+    ['You', 'mic', 'Will do today. To close: Ameren confirms conflict or clearance by the twentieth, I request the test hole and SUE, and I send the AT&T escalation notice this week.'],
+  ];
+
+  function loadSample() {
+    if (running) { toast('Stop listening before loading the sample.'); return; }
+    if (segments.length) { toast('Transcript already has content. Sample not loaded.'); return; }
+    const titleEl = document.getElementById('meetingTitle');
+    if (!titleEl.value.trim()) titleEl.value = 'IL-64 Utility Coordination (sample)';
+    meetingStartTime = Date.now() - SAMPLE_MEETING.length * 9000;
+    SAMPLE_MEETING.forEach(([speaker, source, text], i) => {
+      segments.push({ speaker, text, ts: meetingStartTime + i * 9000, source });
+    });
+    renderTranscript();
+    toast('Sample meeting loaded. Try Suggest a tip or the exports.');
+  }
+
   // ─── Start / Stop ───────────────────────────────────────────────────
   function cleanupDisplayStream() {
     if (displayStream) {
@@ -1356,7 +1438,7 @@
     try {
       stream = await navigator.mediaDevices.getDisplayMedia(constraints);
     } catch {
-      toast('Capture cancelled — continuing mic-only.');
+      toast('Capture cancelled. Continuing mic-only.');
       return null;
     }
     stream.getVideoTracks().forEach(t => t.stop());
@@ -1364,8 +1446,8 @@
     if (!track) {
       stream.getTracks().forEach(t => t.stop());
       toast(kind === 'screen'
-        ? "No system audio shared — choose 'Entire screen' and tick 'Also share system audio' (Windows only). Continuing mic-only."
-        : "No tab audio shared — pick a Chrome tab and tick 'Also share tab audio'. Continuing mic-only.");
+        ? "No system audio shared. Choose 'Entire screen' and tick 'Also share system audio' (Windows only). Continuing mic-only."
+        : "No tab audio shared. Pick a Chrome tab and tick 'Also share tab audio'. Continuing mic-only.");
       return null;
     }
     displayStream = stream;
@@ -1404,14 +1486,14 @@
           // User clicked the browser's "Stop sharing" bar mid-meeting
           if (tabRecognizer) { tabRecognizer.stop(); tabRecognizer = null; }
           renderInterim('', 'tab');
-          document.getElementById('statusLine').textContent = 'Listening — mic only';
-          toast('Tab sharing ended — continuing mic-only.');
+          document.getElementById('statusLine').textContent = 'Listening: mic only';
+          toast('Tab sharing ended. Continuing mic-only.');
         };
       } catch (err) {
         console.error('Tab-audio recognition unsupported:', err);
         tabRecognizer = null;
         cleanupDisplayStream();
-        toast('This browser cannot transcribe tab audio — update Chrome/Edge. Continuing mic-only.');
+        toast('This browser cannot transcribe tab audio. Update Chrome or Edge; continuing mic-only.');
       }
     }
 
@@ -1424,8 +1506,8 @@
     document.getElementById('startBtn').classList.add('btn-danger');
     document.getElementById('sourceSelect').disabled = true;
     document.getElementById('statusLine').textContent = tabRecognizer
-      ? (sourceMode.capture === 'screen' ? 'Listening — mic + computer audio' : 'Listening — mic + tab audio')
-      : (sourceMode.micLabels === 'rotate' ? 'Listening — room audio' : 'Listening — mic only');
+      ? (sourceMode.capture === 'screen' ? 'Listening: mic + computer audio' : 'Listening: mic + tab audio')
+      : (sourceMode.micLabels === 'rotate' ? 'Listening: room audio' : 'Listening: mic only');
     startLevelMeter();
   }
 
@@ -1443,8 +1525,8 @@
     document.getElementById('startBtn').classList.remove('btn-danger');
     document.getElementById('startBtn').classList.add('btn-primary');
     document.getElementById('statusLine').textContent = segments.length
-      ? 'Stopped — transcript preserved below.'
-      : 'Idle — click Start Listening';
+      ? 'Stopped. Transcript preserved below.'
+      : 'Idle: click Start Listening';
 
     if (segments.length > 0) {
       const title = document.getElementById('meetingTitle').value.trim() || 'Untitled meeting';
@@ -1533,6 +1615,22 @@
     };
   }
 
+  // Stamp the client-owned Issue Card constants: a draft id (not a registry
+  // number), the authority boundary, and the human-approval flags the agent
+  // may never change.
+  function stampIssueCards(cards) {
+    if (!cards || !cards.length) return null;
+    const year = new Date().getFullYear();
+    return cards.map((c, i) => ({
+      card_id: `UTL-${year}-DRAFT-${String(i + 1).padStart(2, '0')}`,
+      ...c,
+      authority_boundary: AUTHORITY_BOUNDARY,
+      approval_status: 'none',
+      needs_human_approval: true,
+      drafted_by: 'IDOT Sidecar (meeting extraction)',
+    }));
+  }
+
   async function runExtractionWithButton(btn) {
     if (!providerConfigured()) return null;
     const original = btn.textContent;
@@ -1547,7 +1645,7 @@
     if (!segments.length) { toast('Nothing to export yet.'); return; }
     const meta = meetingMeta();
     const extracted = await runExtractionWithButton(document.getElementById('exportJsonBtn'));
-    if (providerConfigured() && !extracted) toast('AI extraction failed — exporting transcript only.');
+    if (providerConfigured() && !extracted) toast('AI extraction failed. Exporting transcript only.');
 
     const doc = {
       exportVersion: 1,
@@ -1566,10 +1664,12 @@
         aiProvider: extracted ? getProvider() : null,
         evidenceNote: 'Extracted only from statements in the attached transcript',
       },
-      utilities: extracted?.utilities ?? null,
+      draft: true,
+      needsHumanApproval: true,
+      authorityBoundary: AUTHORITY_BOUNDARY,
+      issueCards: stampIssueCards(extracted?.issueCards),
       actionItems: extracted?.actionItems ?? null,
       keyDecisions: extracted?.keyDecisions ?? null,
-      risks: extracted?.risks ?? null,
       insights: collectInsights(),
       transcript: segments.map(s => ({ speaker: s.speaker, text: s.text, timestamp: new Date(s.ts).toISOString() })),
     };
@@ -1578,61 +1678,65 @@
     toast(extracted ? 'Structured meeting JSON downloaded.' : 'Transcript JSON downloaded (no AI extraction).');
   }
 
-  // Render meeting outcomes as a brief.md consumable by `aio run --brief` —
-  // the follow-up work becomes an orchestratable AIO run.
+  // Render meeting outcomes as a brief.md consumable by `aio run --brief`,
+  // so the follow-up work becomes an orchestratable AIO run. Draft only.
   async function exportBrief() {
     if (!segments.length) { toast('Nothing to export yet.'); return; }
     if (!providerConfigured()) {
-      toast('The AIO brief needs AI extraction — configure a provider in Settings first.');
+      toast('The follow-up brief needs AI extraction. Configure a provider in Settings first.');
       return;
     }
     const meta = meetingMeta();
     const x = await runExtractionWithButton(document.getElementById('exportBriefBtn'));
-    if (!x) { toast('AI extraction failed — cannot build the brief.'); return; }
+    if (!x) { toast('AI extraction failed. Cannot build the brief.'); return; }
+    const cards = stampIssueCards(x.issueCards) || [];
 
     const lines = [];
-    lines.push(`# Meeting Follow-up Brief — ${meta.title}`);
+    lines.push(`# Meeting Follow-up Brief: ${meta.title}`);
     lines.push('');
     lines.push(`Generated by IDOT Sidecar from the ${meta.dateIso.slice(0, 10)} utility coordination meeting.`);
     lines.push(`Evidence-based: everything below traces to statements in the meeting transcript (SOURCE: ${meta.sourceKey}).`);
+    lines.push(`Authority boundary: ${AUTHORITY_BOUNDARY} This is a draft; a human with proper authority approves, sends and commits.`);
     lines.push('');
     lines.push('## Mission');
     lines.push('');
     lines.push(`Complete the follow-up actions recorded in the "${meta.title}" utility coordination meeting.`);
     lines.push('');
     if (x.keyDecisions?.length) {
-      lines.push('## Context — decisions already made');
+      lines.push('## Context: decisions already made');
       lines.push('');
       x.keyDecisions.forEach(d => lines.push(`- ${d.description}${d.madeBy ? ` (decided by ${d.madeBy})` : ''}`));
       lines.push('');
     }
-    if (x.utilities?.length) {
-      lines.push('## Context — utility conflicts in play');
+    if (cards.length) {
+      lines.push('## Context: draft issue cards in play');
       lines.push('');
-      x.utilities.forEach(u => lines.push(`- ${u.owner} (${u.facilityType}) — conflict: ${u.conflict}${u.location ? ` at ${u.location}` : ''}${u.status ? `; status: ${u.status}` : ''}`));
+      cards.forEach(c => lines.push(`- ${c.card_id} [${c.risk_color}] ${c.title}${c.owner_stakeholder ? ` (${c.owner_stakeholder})` : ''}${c.location ? ` at ${c.location}` : ''}; module ${c.primary_module}, status ${c.status}`));
       lines.push('');
     }
     lines.push('## Acceptance criteria');
     lines.push('');
     if (x.actionItems?.length) {
-      x.actionItems.forEach((a, i) => lines.push(`- AC${i + 1}: ${a.description}${a.assignee ? ` (owner: ${a.assignee})` : ''}${a.dueDate ? ` — due ${a.dueDate}` : ''} [priority: ${a.priority}]`));
+      x.actionItems.forEach((a, i) => lines.push(`- AC${i + 1}: ${a.description}${a.assignee ? ` (owner: ${a.assignee})` : ''}${a.dueDate ? `, due ${a.dueDate}` : ''} [priority: ${a.priority}]`));
     } else {
       lines.push('- AC1: no action items were recorded in this meeting.');
     }
     lines.push('');
-    if (x.risks?.length) {
-      lines.push('## Constraints — risks to respect');
+    const riskCards = cards.filter(c => c.risk_color === 'Red' || c.risk_color === 'Gray');
+    if (riskCards.length) {
+      lines.push('## Constraints: risks to respect');
       lines.push('');
-      x.risks.forEach(r => lines.push(`- [${r.level}/${r.category}] ${r.description}${r.mitigation ? ` — mitigation: ${r.mitigation}` : ''}`));
+      riskCards.forEach(c => lines.push(`- [${c.risk_color}] ${c.title}${c.requested_action ? `; requested action: ${c.requested_action}` : ''}`));
       lines.push('');
     }
     lines.push('## Non-goals');
     lines.push('');
     lines.push('- Nothing beyond the actions and decisions recorded in this meeting.');
+    lines.push('- No authorization of any kind: coordination is not authorization.');
     lines.push('');
 
     downloadFile(`${meta.fileStem}.brief.md`, lines.join('\n'), 'text/markdown');
-    toast('AIO brief downloaded — run it with: aio run --brief <file>');
+    toast('Follow-up brief downloaded. Run it with: aio run --brief <file>');
   }
 
   // ─── History rendering ──────────────────────────────────────────────
@@ -1684,6 +1788,17 @@
   document.getElementById('exportBtn').addEventListener('click', exportMeeting);
   document.getElementById('exportJsonBtn').addEventListener('click', exportJson);
   document.getElementById('exportBriefBtn').addEventListener('click', exportBrief);
+  // The Load sample button lives inside the transcript empty state, which is
+  // replaced on first render, so listen via delegation.
+  document.getElementById('transcriptBody').addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'loadSampleBtn') loadSample();
+  });
+  document.getElementById('suggestTipBtn').addEventListener('click', () => {
+    if (!segments.length) { toast('Nothing has been said yet. Start listening or load the sample first.'); return; }
+    if (!providerConfigured()) { toast('Configure an AI provider in Settings first.'); return; }
+    lastCoachedAt = Date.now();
+    requestCoaching();
+  });
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
   document.getElementById('providerSelect').addEventListener('change', () => {
