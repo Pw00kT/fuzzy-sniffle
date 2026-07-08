@@ -28,6 +28,7 @@ One app, identical everywhere. The canonical file is `D1 Meeting Sidecar (standa
 - Print stylesheet: printing yields a clean transcript handout (chrome and coaching column hidden)
 - Settings migration: legacy `idot_*` localStorage keys copy to `d1ms_*` once, never overwriting
 - Issue-Card extraction: exports emit draft Issue Cards per the framework schema, client-stamped `UTL-<year>-DRAFT-<nn>` with the authority boundary, `approval_status: "none"` and `needs_human_approval: true`; the sample carries matching canned cards
+- Tier-0 coaching fallback (opt-in, off by default): with the self-hosted provider, a coaching tip falls back to a pinned Claude Sonnet call when the local model is unreachable, times out after 6 seconds, or returns degenerate output (deterministic checks, no model self-report). Coaching only; extraction never falls back. Uses the stored Anthropic key; without one the checkbox has no effect
 
 ## Caveats
 

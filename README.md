@@ -65,6 +65,8 @@ Point the app at any OpenAI-compatible endpoint:
 
 Only the Base URL is required (a trailing `/v1` is handled either way). The key field is only for servers that demand one; the model field is optional (blank uses the server's default) and autocompletes from the server's `/v1/models` list. The server must allow CORS from this page's origin.
 
+Optional tier-0 fallback (off by default): a Settings checkbox lets coaching tips fall back to a pinned Claude Sonnet call when the local model is unreachable, times out after 6 seconds, or returns degenerate output. The checks are deterministic (length, error shape, repetition), never a model self-report. Coaching tips only; end-of-meeting extraction never falls back. Only the recent-discussion snippet is sent, and it uses the same Anthropic key as the Claude provider option; with no key stored the checkbox has no effect.
+
 Relationship to [AIO Orchestrator](https://github.com/Pw00kT/aio-orchestrator): AIO is a local-first CLI orchestration system, not an HTTP gateway; you do not point Sidecar at it. Instead they pair in two ways: (1) point Sidecar at the same NIM endpoints AIO's cheap tiers use, and (2) use Sidecar's Follow-up brief export to turn meeting outcomes into a `brief.md` that `aio run --brief` can orchestrate.
 
 ## Exports
