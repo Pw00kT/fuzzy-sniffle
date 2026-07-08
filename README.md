@@ -6,7 +6,7 @@ Built for coordinators on locked-down government machines: no Node.js, no Docker
 
 ## Quick Start
 
-1. Download `idot-sidecar.html` (or open it from SharePoint, email, or USB)
+1. Download `D1 Meeting Sidecar (standalone).html` (or open it from SharePoint, email, or USB)
 2. Double-click to open it in Chrome or Edge (required: live transcription uses the browser's built-in Speech Recognition API)
 3. Click Settings and configure your AI provider (see below), then save
 4. Pick the audio mode that matches your meeting (see the matrix below), click Start Listening, and grant permissions when prompted
@@ -93,6 +93,6 @@ Extraction is evidence-based only: nothing that is not stated in the transcript,
 
 ## Development
 
-This is intentionally a single static file with no build tooling. To make changes, edit `idot-sidecar.html` directly and open it in a browser to test: no `npm install`, no dev server. House style follows the D1 Framework copy conventions: no em or en dashes in user-visible text, no emoji or arrow glyphs in prose, "the Department" capitalized, and protective wording preserved (coordination is not authorization).
+The canonical file is `D1 Meeting Sidecar (standalone).html`: the framework's design-system bundle (real IDOT triskelion, shipped fonts, DS tokens) carrying this repo's engine patches. Design changes are made on the Claude Design side and re-exported; engine changes are marker-guarded patches in `tools/patch-bundle.js`. House style follows the D1 Framework copy conventions: no em or en dashes in user-visible text, no emoji or arrow glyphs in prose, "the Department" capitalized, and protective wording preserved (coordination is not authorization).
 
-The app is distributed in lockstep to four places (this repo is canonical; the framework workspace and Offline Package, the Claude Design project, and a claude.ai artifact are derived). After any change, run `node tools/sync.js` and follow [SYNC.md](./SYNC.md).
+The app is distributed in lockstep to four places (this repo, the framework workspace and Offline Package, the Claude Design project, and a claude.ai artifact). After any change, run `node tools/sync.js` and follow [SYNC.md](./SYNC.md). The retired dark-theme field build lives in git history.
